@@ -1,0 +1,220 @@
+const jwt = require("jsonwebtoken");
+const User = require("../models/User");
+
+// Helper Functions
+const generateTokens = (userId) => {
+  const accessToken = jwt.sign({ userId }, process.env.JWT_SECRET, {
+    expiresIn: "15m",
+  });
+
+  const refreshToken = jwt.sign(
+    { userId },
+    process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET,
+    { expiresIn: "7d" }
+  );
+
+  return { accessToken, refreshToken };
+};
+
+const getCookieConfig = () => ({
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
+  domain:
+    process.env.NODE_ENV === "production"
+      ? process.env.COOKIE_DOMAIN
+      : undefined,
+});
+
+const setAuthCookies = (res, accessToken, refreshToken) => {
+  const cookieConfig = getCookieConfig();
+
+  res.cookie("accessToken", accessToken, {
+    ...cookieConfig,
+    maxAge: 15 * 60 * 1000, // 15 minutes
+  });
+
+  res.cookie("refreshToken", refreshToken, {
+    ...cookieConfig,
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+  });
+};
+
+const getFrontendUrl = () => {
+  return process.env.CLIENT_URL || "http://localhost:5173";
+};
+
+// Controller Methods
+exports.googleCallback = (req, res) => {
+  try {
+    if (!req.user) {
+      return res.redirect(
+        `${getFrontendUrl()}/auth/error?error=Authentication failed`
+      );
+    }
+
+    const { accessToken, refreshToken } = generateTokens(req.user._id);
+    setAuthCookies(res, accessToken, refreshToken);
+    res.redirect(`${getFrontendUrl()}/auth/success`);
+  } catch (error) {
+    console.error("Google OAuth callback error:", error);
+    res.redirect(
+      `${getFrontendUrl()}/auth/error?error=Token generation failed`
+    );
+  }
+};
+
+exports.discordCallback = (req, res) => {
+  try {
+    if (!req.user) {
+      return res.redirect(
+        `${getFrontendUrl()}/auth/error?error=Authentication failed`
+      );
+    }
+
+    const { accessToken, refreshToken } = generateTokens(req.user._id);
+    setAuthCookies(res, accessToken, refreshToken);
+    res.redirect(`${getFrontendUrl()}/auth/success`);
+  } catch (error) {
+    console.error("Discord OAuth callback error:", error);
+    res.redirect(
+      `${getFrontendUrl()}/auth/error?error=Token generation failed`
+    );
+  }
+};
+
+exports.twitchCallback = (req, res) => {
+  try {
+    if (!req.user) {
+      return res.redirect(
+        `${getFrontendUrl()}/auth/error?error=Authentication failed`
+      );
+    }
+
+    const { accessToken, refreshToken } = generateTokens(req.user._id);
+    setAuthCookies(res, accessToken, refreshToken);
+    res.redirect(`${getFrontendUrl()}/auth/success`);
+  } catch (error) {
+    console.error("Twitch OAuth callback error:", error);
+    res.redirect(
+      `${getFrontendUrl()}/auth/error?error=Token generation failed`
+    );
+  }
+};
+
+exports.getLinkedAccounts = async (req, res) => {
+  try {
+    const token = req.cookies?.accessToken;
+
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        message: "No authentication token provided",
+      });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.userId).select("-password");
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const linkedAccounts = {
+      google: !!user.googleId,
+      discord: !!user.discordId,
+      twitch: !!user.twitchId,
+      primary: user.authProvider,
+    };
+
+    res.json({
+      success: true,
+      data: linkedAccounts,
+    });
+  } catch (error) {
+    console.error("Error getting linked accounts:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
+  }
+};
+
+exports.unlinkProvider = async (req, res) => {
+  try {
+    const { provider } = req.params;
+    const token = req.cookies?.accessToken;
+
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        message: "No authentication token provided",
+      });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.userId);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // Prevent unlinking if it's the only auth method
+    const linkedProviders = [
+      user.googleId ? "google" : null,
+      user.discordId ? "discord" : null,
+      user.twitchId ? "twitch" : null,
+      user.authProvider === "local" ? "local" : null,
+    ].filter(Boolean);
+
+    if (linkedProviders.length <= 1) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot unlink the only authentication method",
+      });
+    }
+
+    // Unlink the provider
+    switch (provider) {
+      case "google":
+        user.googleId = undefined;
+        break;
+      case "discord":
+        user.discordId = undefined;
+        break;
+      case "twitch":
+        user.twitchId = undefined;
+        break;
+      default:
+        return res.status(400).json({
+          success: false,
+          message: "Invalid provider",
+        });
+    }
+
+    // Update primary provider if necessary
+    if (user.authProvider === provider) {
+      user.authProvider =
+        linkedProviders.find((p) => p !== provider) || "local";
+    }
+
+    await user.save();
+
+    res.json({
+      success: true,
+      message: `${provider} account unlinked successfully`,
+    });
+  } catch (error) {
+    console.error("Error unlinking account:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
+  }
+};

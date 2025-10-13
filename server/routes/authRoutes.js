@@ -4,7 +4,7 @@ const rateLimit = require("express-rate-limit");
 const cloudinary = require("cloudinary").v2;
 const { CloudinaryStorage } = require("multer-storage-cloudinary");
 const authController = require("../controllers/authController");
-const auth = require("./middleware/authMiddleware");
+const auth = require("../middleware/authMiddleware");
 const router = express.Router();
 
 // Configure Cloudinary

@@ -1,10 +1,10 @@
 const express = require("express");
 const router = express.Router();
 const scrimController = require("../controllers/scrimController");
-const protect = require("../middleware/authMiddleware");
+const authMiddleware = require("../middleware/authMiddleware");
 
 // All routes require authentication
-router.use(protect);
+router.use(authMiddleware);
 
 // Scrim CRUD operations
 router.get("/", scrimController.listScrims);

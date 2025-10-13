@@ -90,3 +90,4 @@ const authMiddleware = (req, res, next) => {
 };
 
 module.exports = authMiddleware;
+exports.protect = authMiddleware;

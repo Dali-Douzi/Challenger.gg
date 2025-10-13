@@ -9,14 +9,24 @@ const compression = require("compression");
 const session = require("express-session");
 const MongoStore = require("connect-mongo");
 const cron = require("node-cron");
-require("dotenv").config();
 
-const authRoutes = require("./routes/authRoutes");
-const oauthRoutes = require("./routes/oauthRoutes");
-const gameRoutes = require("./routes/gameRoutes");
-const teamRoutes = require("./routes/teamRoutes");
-const scrimRoutes = require("./routes/scrimRoutes");
-const tournamentRoutes = require("./routes/tournamentRoutes");
+// Load environment variables with explicit path
+require("dotenv").config({ path: path.join(__dirname, '../.env') });
+
+// Debug logging for environment variables
+console.log("📂 Current directory:", __dirname);
+console.log("📂 Looking for .env at:", path.join(__dirname, '../.env'));
+console.log("🔍 MONGO_URI:", process.env.MONGO_URI ? "✅ LOADED" : "❌ NOT FOUND");
+console.log("🔍 JWT_SECRET:", process.env.JWT_SECRET ? "✅ LOADED" : "❌ NOT FOUND");
+console.log("🔍 CLOUDINARY_CLOUD_NAME:", process.env.CLOUDINARY_CLOUD_NAME ? "✅ LOADED" : "❌ NOT FOUND");
+console.log("🔍 Environment keys containing MONGO or JWT:", Object.keys(process.env).filter(k => k.includes('MONGO') || k.includes('JWT')));
+
+const authRoutes = require("../routes/authRoutes");
+const oauthRoutes = require("../routes/oauthRoutes");
+const gameRoutes = require("../routes/gameRoutes");
+const teamRoutes = require("../routes/teamRoutes");
+const scrimRoutes = require("../routes/scrimRoutes");
+const tournamentRoutes = require("../routes/tournamentRoutes");
 const seedGames = require("./dbSeeder");
 
 const app = express();
@@ -53,13 +63,13 @@ class OrphanedCleanup {
       const Team = require("../models/Team");
       const Scrim = require("../models/Scrim");
       const User = require("../models/User");
-      const Notification = require("./models/Notification");
-      const ScrimChat = require("./models/ScrimChat");
+      const Notification = require("../models/Notification");
+      const ScrimChat = require("../models/ScrimChat");
 
       let Tournament, Match;
       try {
-        Tournament = require("./models/Tournament");
-        Match = require("./models/Match");
+        Tournament = require("../models/Tournament");
+        Match = require("../models/Match");
       } catch (error) {
         if (verbose)
           console.log(
@@ -448,6 +458,9 @@ const gracefulShutdown = (signal) => {
 
 const connectDB = async () => {
   try {
+    console.log("🔗 Attempting MongoDB connection...");
+    console.log("🔍 MONGO_URI value:", process.env.MONGO_URI || "UNDEFINED!");
+    
     const mongoOptions = {
       maxPoolSize: 10,
       serverSelectionTimeoutMS: 5000,
@@ -521,7 +534,7 @@ app.use(
   })
 );
 
-const passport = require("./config/passport");
+const passport = require("./passport");
 app.use(passport.initialize());
 app.use(passport.session());
 
@@ -623,8 +636,8 @@ app.get("/health", async (req, res) => {
     ];
 
     try {
-      const Tournament = require("./models/Tournament");
-      const Match = require("./models/Match");
+      const Tournament = require("../models/Tournament");
+      const Match = require("../models/Match");
       countPromises.push(Tournament.countDocuments());
       countPromises.push(Match.countDocuments());
     } catch (error) {}

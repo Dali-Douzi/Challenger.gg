@@ -1,5 +1,3 @@
-// src/services/authService.js
-
 import api, { getApiBaseUrl } from './apiClient';
 
 /**
@@ -124,11 +122,13 @@ export const authService = {
   /**
    * Update avatar
    * @param {File} avatarFile - Image file
+   * @param {string} currentPassword - Current password for verification
    */
-  updateAvatar: async (avatarFile) => {
+  updateAvatar: async (avatarFile, currentPassword) => {
     try {
       const formData = new FormData();
       formData.append('avatar', avatarFile);
+      formData.append('currentPassword', currentPassword);
       
       return await api.put('/api/auth/change-avatar', formData);
     } catch (error) {

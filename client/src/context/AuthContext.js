@@ -1,5 +1,3 @@
-// src/context/AuthContext.jsx
-
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
 import authService from '../services/authService';
 import { hasAuthCookies } from '../services/apiClient';
@@ -59,14 +57,10 @@ export const AuthProvider = ({ children }) => {
     checkAuthStatus();
   }, []);
 
-  /**
-   * Check authentication status with retry logic
-   */
   const checkAuthStatus = async (retryCount = 0) => {
     const maxRetries = 1;
 
     try {
-      // Skip auth check if no auth cookies exist
       if (!hasAuthCookies() && retryCount === 0) {
         dispatch({ type: 'LOGOUT' });
         dispatch({ type: 'SET_LOADING', payload: false });
@@ -85,7 +79,6 @@ export const AuthProvider = ({ children }) => {
 
       dispatch({ type: 'LOGOUT' });
     } catch (error) {
-      // Retry once on network errors if we have auth cookies
       if (hasAuthCookies() && retryCount < maxRetries && error.status !== 401) {
         setTimeout(() => checkAuthStatus(retryCount + 1), 1000);
         return;
@@ -99,9 +92,6 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  /**
-   * Login with username/email and password
-   */
   const login = async (identifier, password, rememberMe = false) => {
     try {
       const data = await authService.login(identifier, password, rememberMe);
@@ -122,9 +112,6 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  /**
-   * Sign up new user
-   */
   const signup = async (formData) => {
     try {
       const data = await authService.signup(formData);
@@ -145,9 +132,6 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  /**
-   * Logout current user
-   */
   const logout = async () => {
     try {
       await authService.logout();
@@ -158,9 +142,6 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  /**
-   * Refresh access token
-   */
   const refreshToken = async () => {
     try {
       if (!hasAuthCookies()) {
@@ -183,9 +164,6 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  /**
-   * Update username
-   */
   const updateUsername = async (newUsername, currentPassword) => {
     try {
       const data = await authService.updateUsername(newUsername, currentPassword);
@@ -203,9 +181,6 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  /**
-   * Update email
-   */
   const updateEmail = async (newEmail, currentPassword) => {
     try {
       const data = await authService.updateEmail(newEmail, currentPassword);
@@ -223,9 +198,6 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  /**
-   * Update password
-   */
   const updatePassword = async (currentPassword, newPassword) => {
     try {
       const data = await authService.updatePassword(currentPassword, newPassword);
@@ -238,12 +210,9 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  /**
-   * Update avatar
-   */
-  const updateAvatar = async (avatarFile) => {
+  const updateAvatar = async (avatarFile, currentPassword) => {
     try {
-      const data = await authService.updateAvatar(avatarFile);
+      const data = await authService.updateAvatar(avatarFile, currentPassword);
 
       if (data.success) {
         updateUser(data.user);
@@ -258,9 +227,6 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  /**
-   * Delete avatar
-   */
   const deleteAvatar = async () => {
     try {
       const data = await authService.deleteAvatar();
@@ -278,9 +244,6 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  /**
-   * Delete account
-   */
   const deleteAccount = async (currentPassword) => {
     try {
       const data = await authService.deleteAccount(currentPassword);
@@ -298,16 +261,10 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  /**
-   * Update user data in state
-   */
   const updateUser = (updatedUser) => {
     dispatch({ type: 'UPDATE_USER', payload: updatedUser });
   };
 
-  /**
-   * Set auth data directly (for OAuth callbacks)
-   */
   const setAuthData = (userData) => {
     dispatch({
       type: 'SET_AUTH_DATA',
@@ -315,21 +272,15 @@ export const AuthProvider = ({ children }) => {
     });
   };
 
-  /**
-   * Check if user has specific permissions
-   */
   const hasPermission = (permission) => {
     return state.isAuthenticated && state.user;
   };
 
   const value = {
-    // State
     user: state.user,
     loading: state.isLoading,
     isLoading: state.isLoading,
     isAuthenticated: state.isAuthenticated,
-
-    // Actions
     login,
     signup,
     logout,
@@ -343,8 +294,6 @@ export const AuthProvider = ({ children }) => {
     refreshToken,
     checkAuthStatus,
     setAuthData,
-
-    // Utilities
     hasPermission,
   };
 

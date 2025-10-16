@@ -26,7 +26,7 @@ const MemberRow = ({
     setLoading(true);
     try {
       const res = await makeAuthenticatedRequest(
-        `http://localhost:4444/api/teams/${teamId}/members/${member._id}/rank`,
+        `${API_BASE}/api/teams/${teamId}/members/${member._id}/rank`,
         {
           method: "PUT",
           headers: {
@@ -52,7 +52,7 @@ const MemberRow = ({
     setLoading(true);
     try {
       const res = await makeAuthenticatedRequest(
-        `http://localhost:4444/api/teams/${teamId}/members/${member._id}/role`,
+        `${API_BASE}/api/teams/${teamId}/members/${member._id}/role`,
         {
           method: "PUT",
           headers: {
@@ -86,7 +86,7 @@ const MemberRow = ({
     setLoading(true);
     try {
       const res = await makeAuthenticatedRequest(
-        `http://localhost:4444/api/teams/${teamId}/members/${member._id}`,
+        `${API_BASE}/api/teams/${teamId}/members/${member._id}`,
         {
           method: "DELETE",
         }

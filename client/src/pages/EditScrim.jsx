@@ -12,7 +12,8 @@ import {
   Paper,
 } from "@mui/material";
 
-const API_BASE = "http://localhost:4444";
+import { getApiBaseUrl } from '../services/apiClient';
+const API_BASE = getApiBaseUrl();
 
 export default function EditScrim() {
   const navigate = useNavigate();

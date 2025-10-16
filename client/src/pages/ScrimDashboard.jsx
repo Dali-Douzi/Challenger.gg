@@ -27,7 +27,8 @@ import {
 import { SportsEsports, AccessTime } from "@mui/icons-material";
 import { useAuth } from "../context/AuthContext";
 
-const API_BASE = "http://localhost:4444";
+import { getApiBaseUrl } from '../services/apiClient';
+const API_BASE = getApiBaseUrl();
 
 // Helper to get team name initials
 const getTeamInitials = (teamName) => {

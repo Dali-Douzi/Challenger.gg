@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import axios from "axios";
+import api from "../services/apiClient";
 import {
   Container,
   Typography,
@@ -15,7 +15,8 @@ import {
   Alert,
 } from "@mui/material";
 
-const API_BASE = "http://localhost:4444";
+import { getApiBaseUrl } from '../services/apiClient';
+const API_BASE = getApiBaseUrl();
 
 const ScrimRequests = () => {
   const { scrimId } = useParams();
@@ -25,7 +26,6 @@ const ScrimRequests = () => {
   const [actionLoading, setActionLoading] = useState({});
   const [error, setError] = useState(null);
 
-  // ✅ DEBUG: Log scrimId
   console.log("🔍 ScrimRequests - scrimId:", scrimId);
 
   useEffect(() => {
@@ -34,12 +34,7 @@ const ScrimRequests = () => {
         console.log("🔍 Fetching scrim details for:", scrimId);
         
         // GET /api/scrims/:scrimId
-        const { data: scrim } = await axios.get(
-          `${API_BASE}/api/scrims/${scrimId}`,
-          {
-            headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
-          }
-        );
+        const scrim = await api.get(`/api/scrims/${scrimId}`);
 
         console.log("🔍 Fetched scrim data:", scrim);
 
@@ -73,11 +68,7 @@ const ScrimRequests = () => {
     setActionLoading((prev) => ({ ...prev, [teamId]: true }));
     try {
       // PUT /api/scrims/accept/:scrimId or /api/scrims/decline/:scrimId
-      const response = await axios.put(`${API_BASE}/api/scrims/${action}/${scrimId}`, {
-        teamId,
-      }, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
-      });
+      await api.put(`/api/scrims/${action}/${scrimId}`, { teamId });
       
       console.log(`🔍 ${action} response:`, response.data);
       

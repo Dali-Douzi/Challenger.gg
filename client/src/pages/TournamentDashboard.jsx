@@ -11,6 +11,8 @@ import {
   Alert,
 } from "@mui/material";
 import { useAuth } from "../context/AuthContext";
+import api from "../services/apiClient";
+const { makeAuthenticatedRequest } = useAuth();
 
 const TournamentDashboard = () => {
   const navigate = useNavigate();
@@ -23,32 +25,19 @@ const TournamentDashboard = () => {
 
   // Fetch tournaments data
   const fetchTournaments = async () => {
-    setLoading(true);
-    setError("");
-    try {
-      console.log("Fetching tournaments...");
-      const response = await makeAuthenticatedRequest(
-        "http://localhost:4444/api/tournaments"
-      );
-      
-      if (response && response.ok) {
-        const data = await response.json();
-        console.log("Tournaments data received:", data);
-        // Ensure we always set an array, even if API returns something unexpected
-        const tournamentsData = Array.isArray(data) ? data : [];
-        setTournaments(tournamentsData);
-      } else {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to load tournaments");
-      }
-    } catch (err) {
-      console.error("Error fetching tournaments:", err);
-      setError(err.message || "Failed to load tournaments");
-      setTournaments([]); // Set empty array on error
-    } finally {
-      setLoading(false);
-    }
-  };
+  setLoading(true);
+  setError("");
+  try {
+    const data = await api.get('/api/tournaments');
+    const tournamentsData = Array.isArray(data) ? data : [];
+    setTournaments(tournamentsData);
+  } catch (err) {
+    setError(err.message || "Failed to load tournaments");
+    setTournaments([]);
+  } finally {
+    setLoading(false);
+  }
+};
 
   // Load tournaments on component mount
   useEffect(() => {

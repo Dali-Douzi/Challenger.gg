@@ -7,8 +7,6 @@ import { useAuth } from "../context/AuthContext";
 
 const CreateTournamentPage = () => {
   const navigate = useNavigate();
-  const { makeAuthenticatedRequest } = useAuth();
-  
   const [modalOpen, setModalOpen] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [refCode, setRefCode] = useState("");
@@ -17,65 +15,25 @@ const CreateTournamentPage = () => {
 
 
   const handleCreate = async (formData) => {
-    try {
-      const response = await makeAuthenticatedRequest(
-        "http://localhost:4444/api/tournaments",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(formData),
-        }
-      );
-      
-      if (response && response.ok) {
-        const data = await response.json();
-        setRefCode(data.refereeCode);
-        setTourneyId(data._id);
-        setShowCode(true);
-      } else {
-        const error = await response.json();
-        throw new Error(error.message || "Failed to create tournament");
-      }
-    } catch (err) {
-      setErrorMsg(err.message || "Error creating tournament");
-    }
-  };
+  try {
+    const data = await api.post("/api/tournaments", formData);
+    setRefCode(data.refereeCode);
+    setTourneyId(data._id);
+    setShowCode(true);
+  } catch (err) {
+    setErrorMsg(err.message || "Error creating tournament");
+  }
+};
 
   const handleRefereeJoin = async (code) => {
-    try {
-      const res = await makeAuthenticatedRequest(
-        `http://localhost:4444/api/tournaments/code/${code}`
-      );
-      
-      if (res && res.ok) {
-        const tournamentData = await res.json();
-        
-        const joinRes = await makeAuthenticatedRequest(
-          `http://localhost:4444/api/tournaments/${tournamentData._id}/referees`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ code }),
-          }
-        );
-        
-        if (joinRes && joinRes.ok) {
-          navigate(`/tournaments/${tournamentData._id}`);
-        } else {
-          const error = await joinRes.json();
-          throw new Error(error.message || "Failed to join as referee");
-        }
-      } else {
-        throw new Error("Invalid referee code");
-      }
-    } catch (err) {
-      setErrorMsg(err.message || "Invalid referee code");
-    }
-  };
+  try {
+    const tournamentData = await api.get(`/api/tournaments/code/${code}`);
+    await api.post(`/api/tournaments/${tournamentData._id}/referees`, { code });
+    navigate(`/tournaments/${tournamentData._id}`);
+  } catch (err) {
+    setErrorMsg(err.message || "Invalid referee code");
+  }
+};
 
   return (
     <Container sx={{ py: 4, color: "white" }}>

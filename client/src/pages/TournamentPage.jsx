@@ -31,7 +31,7 @@ import ParticipantsSection from "../components/ParticipantsSection";
 import ControlsSection from "../components/ControlsSection";
 
 import moment from "moment";
-import axios from "axios";
+import api from "../services/apiClient";
 import EventIcon from "@mui/icons-material/Event";
 import VideogameAssetIcon from "@mui/icons-material/VideogameAsset";
 import GroupIcon from "@mui/icons-material/Group";
@@ -70,7 +70,7 @@ const TournamentPage = () => {
     setTournamentLoading(true);
     setTournamentError("");
     try {
-      const response = await axios.get(`/tournaments/${id}`);
+      const response = await api.get(`/api/tournaments/${id}`);
       setTournament(response.data);
     } catch (err) {
       setTournamentError(err.response?.data?.message || "Failed to load tournament");
@@ -86,7 +86,7 @@ const TournamentPage = () => {
     setLoadingMyTeams(true);
     setMyTeamsError("");
     try {
-      const response = await axios.get("/teams/my");
+      const response = await api.get("/api/teams/my");
       setMyTeams(response.data);
     } catch (err) {
       setMyTeamsError(err.response?.data?.message || "Failed to load teams");
@@ -171,7 +171,7 @@ const TournamentPage = () => {
     setPageError("");
 
     try {
-      await axios.post(`/tournaments/${id}/teams`, {
+      await api.post(`api/tournaments/${id}/teams`, {
         teamId: selectedTeamToJoin,
       });
 
@@ -468,7 +468,7 @@ const TournamentPage = () => {
                 )
               ) {
                 try {
-                  await axios.delete(`/tournaments/${id}`);
+                  await api.delete(`api/tournaments/${id}`);
                   setSuccessMessage("Tournament cancelled successfully");
                   setTimeout(() => navigate("/tournaments"), 2000);
                 } catch (err) {
@@ -494,8 +494,8 @@ const TournamentPage = () => {
                 )
               ) {
                 try {
-                  await axios.delete(
-                    `/tournaments/${id}/referees/${currentUser._id}`
+                  await api.delete(
+                    `api/tournaments/${id}/referees/${currentUser._id}`
                   );
                   setSuccessMessage("You have quit as referee");
                   await fetchTournament(); // Refresh tournament data

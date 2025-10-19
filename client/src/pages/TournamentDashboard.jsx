@@ -10,34 +10,31 @@ import {
   CircularProgress,
   Alert,
 } from "@mui/material";
-import { useAuth } from "../context/AuthContext";
 import api from "../services/apiClient";
-const { makeAuthenticatedRequest } = useAuth();
 
 const TournamentDashboard = () => {
   const navigate = useNavigate();
-  const { makeAuthenticatedRequest } = useAuth();
   
-  // State for tournaments (replacing useTournaments hook)
+  // State for tournaments
   const [tournaments, setTournaments] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   // Fetch tournaments data
   const fetchTournaments = async () => {
-  setLoading(true);
-  setError("");
-  try {
-    const data = await api.get('/api/tournaments');
-    const tournamentsData = Array.isArray(data) ? data : [];
-    setTournaments(tournamentsData);
-  } catch (err) {
-    setError(err.message || "Failed to load tournaments");
-    setTournaments([]);
-  } finally {
-    setLoading(false);
-  }
-};
+    setLoading(true);
+    setError("");
+    try {
+      const data = await api.get('/api/tournaments');
+      const tournamentsData = Array.isArray(data) ? data : [];
+      setTournaments(tournamentsData);
+    } catch (err) {
+      setError(err.message || "Failed to load tournaments");
+      setTournaments([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Load tournaments on component mount
   useEffect(() => {

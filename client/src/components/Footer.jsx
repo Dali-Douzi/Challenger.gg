@@ -3,7 +3,7 @@ import { Box, Typography, Container, Link, IconButton, Stack, Divider } from "@m
 import TwitterIcon from "@mui/icons-material/Twitter";
 import FacebookIcon from "@mui/icons-material/Facebook";
 import InstagramIcon from "@mui/icons-material/Instagram";
-import { GitHub, Discord } from "@mui/icons-material";
+import { GitHub, Forum } from "@mui/icons-material";
 
 /**
  * Footer Component
@@ -145,7 +145,7 @@ const Footer = () => {
                 { icon: <FacebookIcon />, url: "https://facebook.com", label: "Facebook" },
                 { icon: <InstagramIcon />, url: "https://instagram.com", label: "Instagram" },
                 { icon: <GitHub />, url: "https://github.com", label: "GitHub" },
-                { icon: <Discord />, url: "https://discord.com", label: "Discord" },
+                { icon: <Forum />, url: "https://discord.com", label: "Discord" },
               ].map((social) => (
                 <IconButton
                   key={social.label}

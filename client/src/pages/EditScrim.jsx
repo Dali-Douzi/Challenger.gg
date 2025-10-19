@@ -11,14 +11,15 @@ import {
   CircularProgress,
   Paper,
 } from "@mui/material";
-
+import { useAuth } from "../context/AuthContext";
 import { getApiBaseUrl } from '../services/apiClient';
+
 const API_BASE = getApiBaseUrl();
 
 export default function EditScrim() {
   const navigate = useNavigate();
-  const token = localStorage.getItem("token");
-  const scrimId = localStorage.getItem("editingScrimId");
+  const { makeAuthenticatedRequest } = useAuth();
+  const scrimId = sessionStorage.getItem("editingScrimId");
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -64,9 +65,7 @@ export default function EditScrim() {
       try {
         setLoading(true);
         // 1) fetch scrim
-        const res = await fetch(`${API_BASE}/api/scrims/${scrimId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await makeAuthenticatedRequest(`${API_BASE}/api/scrims/${scrimId}`);
         if (!res.ok) throw new Error("Failed to load scrim");
         const scrim = await res.json();
 
@@ -87,15 +86,14 @@ export default function EditScrim() {
         setTimeOptions(times);
 
         // 4) fetch team to get its game
-        const teamRes = await fetch(
-          `${API_BASE}/api/teams/${scrim.teamA._id}`,
-          { headers: { Authorization: `Bearer ${token}` } }
+        const teamRes = await makeAuthenticatedRequest(
+          `${API_BASE}/api/teams/${scrim.teamA._id}`
         );
         if (!teamRes.ok) throw new Error("Failed to load team");
         const team = await teamRes.json();
 
         // 5) fetch all games to derive formats
-        const gamesRes = await fetch(`${API_BASE}/api/games`);
+        const gamesRes = await fetch(`${API_BASE}/api/teams/games`);
         if (!gamesRes.ok) throw new Error("Failed to load games");
         const games = await gamesRes.json();
         const gameDoc =
@@ -112,7 +110,7 @@ export default function EditScrim() {
     };
 
     loadScrim();
-  }, [scrimId, token, navigate]);
+  }, [scrimId, navigate, makeAuthenticatedRequest]);
 
   // ─── Save changes ─────────────────────────────────────────────────────────────
   const handleSave = async () => {
@@ -125,11 +123,10 @@ export default function EditScrim() {
       const [h, m] = time.split(":").map(Number);
       dt.setHours(h, m, 0, 0);
 
-      const res = await fetch(`${API_BASE}/api/scrims/${scrimId}`, {
+      const res = await makeAuthenticatedRequest(`${API_BASE}/api/scrims/${scrimId}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           format,
@@ -156,9 +153,8 @@ export default function EditScrim() {
     }
     setSaving(true);
     try {
-      const res = await fetch(`${API_BASE}/api/scrims/${scrimId}`, {
+      const res = await makeAuthenticatedRequest(`${API_BASE}/api/scrims/${scrimId}`, {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) {
         const { message } = await res.json();
@@ -183,7 +179,7 @@ export default function EditScrim() {
   }
 
   return (
-    <Paper sx={{ maxWidth: 600, mx: "auto", p: 4, color: "white" }}>
+    <Paper sx={{ maxWidth: 600, mx: "auto", p: 4, mt: 4 }}>
       <Typography variant="h5" gutterBottom>
         Edit Scrim
       </Typography>

@@ -13,7 +13,7 @@ import { AuthProvider } from "./context/AuthContext";
 // Import components
 import ProtectedRoute from "./components/ProtectedRoute";
 import Navbar from "./components/Navbar";
-import OAuthCallback from "./pages/OAuthCallback";
+import OAuthCallback from "./components/OAuthCallback";
 import Footer from "./components/Footer";
 
 // Import pages

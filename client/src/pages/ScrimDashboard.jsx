@@ -26,8 +26,9 @@ import {
 } from "@mui/material";
 import { SportsEsports, AccessTime } from "@mui/icons-material";
 import { useAuth } from "../context/AuthContext";
-
 import { getApiBaseUrl } from '../services/apiClient';
+
+// Get API base URL
 const API_BASE = getApiBaseUrl();
 
 // Helper to get team name initials
@@ -116,13 +117,13 @@ const ScrimDashboard = () => {
       try {
         console.log("Fetching teams...");
         const res = await makeAuthenticatedRequest(
-          "http://localhost:4444/api/teams/my"
+          `${API_BASE}/api/teams/my`
         );
         console.log("Teams response:", res);
         if (res && res.ok) {
           const data = await res.json();
           console.log("Teams data:", data);
-          const teamsArray = Array.isArray(data) ? data : [];
+          const teamsArray = Array.isArray(data) ? data : data.data ? data.data : [];
           setTeams(teamsArray);
           if (teamsArray.length > 0) setSelectedTeam(teamsArray[0]._id);
         } else {
@@ -147,7 +148,7 @@ const ScrimDashboard = () => {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch("http://localhost:4444/api/teams/games");
+        const res = await fetch(`${API_BASE}/api/teams/games`);
         console.log("Games response status:", res.status);
         if (res.ok) {
           const data = await res.json();
@@ -245,7 +246,7 @@ const ScrimDashboard = () => {
       if (selectedServerFilter) params.append("server", selectedServerFilter);
       if (selectedRankFilter) params.append("rank", selectedRankFilter);
 
-      const url = `http://localhost:4444/api/scrims?${params.toString()}`;
+      const url = `${API_BASE}/api/scrims?${params.toString()}`;
       console.log("Fetching scrims from:", url);
 
       const res = await makeAuthenticatedRequest(url);
@@ -357,7 +358,7 @@ const ScrimDashboard = () => {
     setLoading((l) => ({ ...l, posting: true }));
     try {
       const res = await makeAuthenticatedRequest(
-        "http://localhost:4444/api/scrims",
+        `${API_BASE}/api/scrims`,
         {
           method: "POST",
           headers: {
@@ -398,7 +399,7 @@ const ScrimDashboard = () => {
     setRequested((prev) => [...prev, scrimId]);
     try {
       const res = await makeAuthenticatedRequest(
-        `http://localhost:4444/api/scrims/request/${scrimId}`,
+        `${API_BASE}/api/scrims/request/${scrimId}`,
         {
           method: "POST",
           headers: {
@@ -457,7 +458,7 @@ const ScrimDashboard = () => {
     if (!team) return "Unknown";
 
     const teamLogo = team.logo
-      ? `http://localhost:4444/${team.logo}?t=${Date.now()}`
+      ? `${API_BASE}/${team.logo}?t=${Date.now()}`
       : null;
 
     const teamInitials = getTeamInitials(team.name);
@@ -527,326 +528,399 @@ const ScrimDashboard = () => {
     );
   }
 
-  if (error) {
-    return (
-      <Container maxWidth="md">
-        <Box sx={{ p: 4, textAlign: "center" }}>
-          <Typography variant="h6" color="error">
-            {error}
-          </Typography>
-          <Button
-            variant="contained"
-            onClick={() => window.location.reload()}
-            sx={{ mt: 2 }}
-          >
-            Retry
-          </Button>
-        </Box>
-      </Container>
-    );
-  }
-
   return (
-    <Container maxWidth="md">
-      <Box sx={{ p: 4, color: "white" }}>
-        {/* Enhanced Header */}
-        <Box sx={{ mb: 4 }}>
-          <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
-            <SportsEsports
-              sx={{ fontSize: 40, color: theme.palette.primary.main }}
-            />
-            <Typography variant="h4" fontWeight="bold">
-              Scrim Dashboard
+    <Container maxWidth="xl" sx={{ py: 4 }}>
+      <Typography
+        variant="h4"
+        gutterBottom
+        sx={{
+          fontWeight: 600,
+          mb: 4,
+          background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+          WebkitBackgroundClip: "text",
+          WebkitTextFillColor: "transparent",
+        }}
+      >
+        Scrim Dashboard
+      </Typography>
+
+      <Grid container spacing={3}>
+        {/* POST A SCRIM */}
+        <Grid item xs={12} lg={4}>
+          <Paper
+            elevation={3}
+            sx={{
+              p: 3,
+              background: `linear-gradient(135deg, ${alpha(
+                theme.palette.primary.main,
+                0.05
+              )} 0%, ${alpha(theme.palette.secondary.main, 0.05)} 100%)`,
+              backdropFilter: "blur(10px)",
+              border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
+              borderRadius: 2,
+            }}
+          >
+            <Typography
+              variant="h6"
+              gutterBottom
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                gap: 1,
+                mb: 3,
+                fontWeight: 600,
+              }}
+            >
+              <SportsEsports color="primary" />
+              Post a Scrim
             </Typography>
-            <Chip
-              label={`${scrims.length} Available`}
-              color="primary"
-              variant="outlined"
-              size="small"
-            />
-          </Stack>
-          <Typography variant="body1" color="text.secondary">
-            Create and join competitive scrimmages with teams around the world
-          </Typography>
-        </Box>
 
-        {/* Post New Scrim */}
-        <Paper sx={{ p: 2, mb: 4 }}>
-          <Typography variant="h6" gutterBottom>
-            Post New Scrim
-          </Typography>
-          <Box
-            component="form"
-            onSubmit={handlePostScrim}
-            sx={{ display: "grid", gap: 2 }}
+            <Box component="form" onSubmit={handlePostScrim}>
+              <FormControl fullWidth sx={{ mb: 2 }}>
+                <InputLabel>Your Team</InputLabel>
+                <Select
+                  value={selectedTeam}
+                  onChange={(e) => setSelectedTeam(e.target.value)}
+                  label="Your Team"
+                >
+                  {teams.map((t) => (
+                    <MenuItem key={t._id} value={t._id}>
+                      {t.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+
+              <FormControl fullWidth sx={{ mb: 2 }}>
+                <InputLabel>Format</InputLabel>
+                <Select
+                  value={format}
+                  onChange={(e) => setFormat(e.target.value)}
+                  label="Format"
+                >
+                  {formats.map((f) => (
+                    <MenuItem key={f} value={f}>
+                      {f}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+
+              <FormControl fullWidth sx={{ mb: 2 }}>
+                <InputLabel>Day</InputLabel>
+                <Select
+                  value={selectedDay}
+                  onChange={(e) => setSelectedDay(e.target.value)}
+                  label="Day"
+                >
+                  {getDayOptions().map((d) => (
+                    <MenuItem key={d} value={d}>
+                      {d}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+
+              <FormControl fullWidth sx={{ mb: 3 }}>
+                <InputLabel>Time</InputLabel>
+                <Select
+                  value={selectedTime}
+                  onChange={(e) => setSelectedTime(e.target.value)}
+                  label="Time"
+                >
+                  {getTimeOptions().map((t) => (
+                    <MenuItem key={t} value={t}>
+                      {t}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+
+              <Button
+                type="submit"
+                variant="contained"
+                fullWidth
+                disabled={loading.posting}
+                sx={{
+                  py: 1.5,
+                  fontWeight: 600,
+                  textTransform: "none",
+                  fontSize: "1rem",
+                }}
+              >
+                {loading.posting ? (
+                  <CircularProgress size={24} color="inherit" />
+                ) : (
+                  "Post Scrim"
+                )}
+              </Button>
+            </Box>
+          </Paper>
+        </Grid>
+
+        {/* AVAILABLE SCRIMS */}
+        <Grid item xs={12} lg={8}>
+          <Paper
+            elevation={3}
+            sx={{
+              p: 3,
+              background: `linear-gradient(135deg, ${alpha(
+                theme.palette.primary.main,
+                0.05
+              )} 0%, ${alpha(theme.palette.secondary.main, 0.05)} 100%)`,
+              backdropFilter: "blur(10px)",
+              border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
+              borderRadius: 2,
+            }}
           >
-            <FormControl fullWidth>
-              <InputLabel id="team-select-label">Team</InputLabel>
-              <Select
-                labelId="team-select-label"
-                value={selectedTeam}
-                label="Team"
-                onChange={(e) => setSelectedTeam(e.target.value)}
-              >
-                {teams.map((t) => (
-                  <MenuItem key={t._id} value={t._id}>
-                    {t.name}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-
-            <FormControl fullWidth>
-              <InputLabel id="format-select-label">Format</InputLabel>
-              <Select
-                labelId="format-select-label"
-                value={format}
-                label="Format"
-                onChange={(e) => setFormat(e.target.value)}
-              >
-                {formats.map((f) => (
-                  <MenuItem key={f} value={f}>
-                    {f}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-
-            <FormControl fullWidth>
-              <InputLabel id="day-select-label">Day</InputLabel>
-              <Select
-                labelId="day-select-label"
-                value={selectedDay}
-                label="Day"
-                onChange={(e) => setSelectedDay(e.target.value)}
-              >
-                {getDayOptions().map((d) => (
-                  <MenuItem key={d} value={d}>
-                    {d}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-
-            <FormControl fullWidth>
-              <InputLabel id="time-select-label">Time</InputLabel>
-              <Select
-                labelId="time-select-label"
-                value={selectedTime}
-                label="Time"
-                onChange={(e) => setSelectedTime(e.target.value)}
-              >
-                {getTimeOptions().map((t) => (
-                  <MenuItem key={t} value={t}>
-                    {t}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-
-            <Button
-              variant="contained"
-              type="submit"
-              disabled={loading.posting}
+            <Typography
+              variant="h6"
+              gutterBottom
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                gap: 1,
+                mb: 3,
+                fontWeight: 600,
+              }}
             >
-              {loading.posting ? "Posting..." : "Post Scrim"}
-            </Button>
-          </Box>
-        </Paper>
+              <AccessTime color="primary" />
+              Available Scrims
+            </Typography>
 
-        {/* Filters */}
-        <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
-          <FormControl sx={{ minWidth: 150 }}>
-            <InputLabel id="game-filter-label">Game</InputLabel>
-            <Select
-              labelId="game-filter-label"
-              value={selectedGameFilter}
-              onChange={(e) => handleGameChange(e.target.value)}
-              label="Game"
-            >
-              <MenuItem value="">
-                <em>All</em>
-              </MenuItem>
-              {Array.isArray(games) &&
-                games.map((g) => (
-                  <MenuItem key={g._id} value={g.name}>
-                    {g.name}
-                  </MenuItem>
-                ))}
-            </Select>
-          </FormControl>
-
-          <FormControl sx={{ minWidth: 150 }}>
-            <InputLabel id="server-filter-label">Server</InputLabel>
-            <Select
-              labelId="server-filter-label"
-              value={selectedServerFilter}
-              onChange={(e) => setSelectedServerFilter(e.target.value)}
-              label="Server"
-            >
-              <MenuItem value="">
-                <em>All</em>
-              </MenuItem>
-              {Array.isArray(serverOptions) &&
-                serverOptions.map((srv) => (
-                  <MenuItem key={srv} value={srv}>
-                    {srv}
-                  </MenuItem>
-                ))}
-            </Select>
-          </FormControl>
-
-          <FormControl sx={{ minWidth: 150 }}>
-            <InputLabel id="rank-filter-label">Rank</InputLabel>
-            <Select
-              labelId="rank-filter-label"
-              value={selectedRankFilter}
-              onChange={(e) => setSelectedRankFilter(e.target.value)}
-              label="Rank"
-            >
-              <MenuItem value="">
-                <em>All</em>
-              </MenuItem>
-              {Array.isArray(rankOptions) &&
-                rankOptions.map((rk) => (
-                  <MenuItem key={rk} value={rk}>
-                    {rk}
-                  </MenuItem>
-                ))}
-            </Select>
-          </FormControl>
-        </Box>
-
-        {/* All Scrims */}
-        <Typography variant="h6" gutterBottom>
-          All Scrims
-        </Typography>
-
-        {/* Requesting team selector */}
-        <FormControl fullWidth sx={{ mb: 2 }}>
-          <InputLabel id="requesting-team-label">Requesting As</InputLabel>
-          <Select
-            labelId="requesting-team-label"
-            value={selectedRequestTeam}
-            label="Requesting As"
-            onChange={(e) => setSelectedRequestTeam(e.target.value)}
-          >
-            <MenuItem value="">
-              <em>Choose a team</em>
-            </MenuItem>
-            {Array.isArray(teams) &&
-              teams.map((t) => (
-                <MenuItem key={t._id} value={t._id}>
-                  {t.name}
-                </MenuItem>
-              ))}
-          </Select>
-        </FormControl>
-
-        {!Array.isArray(scrims) || scrims.length === 0 ? (
-          <Typography>No scrims found.</Typography>
-        ) : (
-          <Box>
-            {Array.isArray(scrims) &&
-              scrims.map((s) => {
-                const isOwnTeam = s.teamA?._id === selectedTeam;
-                const hasRequested = requested.includes(s._id);
-
-                let btnText = "";
-                let btnDisabled = false;
-                let btnAction = null;
-
-                if (s.status === "booked") {
-                  btnText = "Booked";
-                  btnDisabled = true;
-                } else if (isOwnTeam) {
-                  btnText = "Edit";
-                  btnAction = () => handleEditScrim(s._id);
-                } else if (hasRequested) {
-                  btnText = "Request Sent";
-                  btnDisabled = true;
-                } else {
-                  btnText = "Send Request";
-                  btnDisabled = !selectedRequestTeam;
-                  btnAction = () => handleSendRequest(s._id);
-                }
-
-                return (
-                  <Paper
-                    key={s._id}
-                    sx={{
-                      p: 2,
-                      mb: 2,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                    }}
+            {/* Filters */}
+            <Grid container spacing={2} sx={{ mb: 3 }}>
+              <Grid item xs={12} sm={4}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Game</InputLabel>
+                  <Select
+                    value={selectedGameFilter}
+                    onChange={(e) => handleGameChange(e.target.value)}
+                    label="Game"
                   >
-                    <Box sx={{ flex: 1 }}>
-                      {/* Team logos and names */}
-                      <Box sx={{ mb: 1 }}>
-                        {s.teamB ? (
-                          <Stack
-                            direction="row"
-                            alignItems="center"
-                            spacing={2}
-                          >
-                            {renderTeamWithLogo(s.teamA)}
-                            <Typography variant="body2" sx={{ mx: 1 }}>
-                              vs
-                            </Typography>
-                            {renderTeamWithLogo(s.teamB)}
-                          </Stack>
-                        ) : (
-                          renderTeamWithLogo(s.teamA)
-                        )}
-                      </Box>
+                    {games.map((g) => (
+                      <MenuItem key={g._id} value={g.name}>
+                        {g.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
 
-                      {/* Scrim details */}
-                      <Box
+              <Grid item xs={12} sm={4}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Server</InputLabel>
+                  <Select
+                    value={selectedServerFilter}
+                    onChange={(e) => setSelectedServerFilter(e.target.value)}
+                    label="Server"
+                  >
+                    <MenuItem value="">All</MenuItem>
+                    {serverOptions.map((s) => (
+                      <MenuItem key={s} value={s}>
+                        {s}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              <Grid item xs={12} sm={4}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Rank</InputLabel>
+                  <Select
+                    value={selectedRankFilter}
+                    onChange={(e) => setSelectedRankFilter(e.target.value)}
+                    label="Rank"
+                  >
+                    <MenuItem value="">All</MenuItem>
+                    {rankOptions.map((r) => (
+                      <MenuItem key={r} value={r}>
+                        {r}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              <Grid item xs={12}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Request Team</InputLabel>
+                  <Select
+                    value={selectedRequestTeam}
+                    onChange={(e) => setSelectedRequestTeam(e.target.value)}
+                    label="Request Team"
+                  >
+                    {teams.map((t) => (
+                      <MenuItem key={t._id} value={t._id}>
+                        {t.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+            </Grid>
+
+            {error && (
+              <Typography color="error" sx={{ mb: 2 }}>
+                {error}
+              </Typography>
+            )}
+
+            {loading.scrims ? (
+              <Box sx={{ textAlign: "center", py: 4 }}>
+                <CircularProgress />
+              </Box>
+            ) : scrims.length === 0 ? (
+              <Typography sx={{ textAlign: "center", py: 4, opacity: 0.6 }}>
+                No scrims available
+              </Typography>
+            ) : (
+              <List sx={{ maxHeight: 600, overflow: "auto" }}>
+                {scrims.map((scrim) => {
+                  const isRequested = requested.includes(scrim._id);
+                  const isMyScrim =
+                    scrim.teamA?._id === selectedTeam ||
+                    scrim.teamB?._id === selectedTeam;
+
+                  return (
+                    <ListItem
+                      key={scrim._id}
+                      sx={{
+                        mb: 2,
+                        borderRadius: 2,
+                        bgcolor: alpha(theme.palette.background.paper, 0.6),
+                        border: `1px solid ${alpha(
+                          theme.palette.divider,
+                          0.1
+                        )}`,
+                        "&:hover": {
+                          bgcolor: alpha(theme.palette.primary.main, 0.05),
+                          border: `1px solid ${alpha(
+                            theme.palette.primary.main,
+                            0.2
+                          )}`,
+                        },
+                      }}
+                    >
+                      <Card
                         sx={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 1,
-                          flexWrap: "wrap",
+                          width: "100%",
+                          bgcolor: "transparent",
+                          boxShadow: "none",
                         }}
                       >
-                        <Chip
-                          label={s.format}
-                          size="small"
-                          color="primary"
-                          variant="outlined"
-                        />
-                        <Chip label={s.status} size="small" />
-                        <Box
-                          sx={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 0.5,
-                          }}
-                        >
-                          <AccessTime sx={{ fontSize: 16 }} />
-                          <Typography variant="body2" color="text.secondary">
-                            {formatTime(s.scheduledTime)}
-                          </Typography>
-                        </Box>
-                      </Box>
-                    </Box>
+                        <CardContent>
+                          <Grid container alignItems="center" spacing={2}>
+                            <Grid item xs={12} sm={6}>
+                              <Box
+                                sx={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 2,
+                                }}
+                              >
+                                {renderTeamWithLogo(scrim.teamA)}
+                                <Typography
+                                  variant="body2"
+                                  sx={{ opacity: 0.6 }}
+                                >
+                                  vs
+                                </Typography>
+                                {scrim.teamB
+                                  ? renderTeamWithLogo(scrim.teamB)
+                                  : "TBD"}
+                              </Box>
+                            </Grid>
 
-                    <Button
-                      variant="outlined"
-                      onClick={btnAction}
-                      disabled={btnDisabled}
-                      sx={{ ml: 2 }}
-                    >
-                      {btnText}
-                    </Button>
-                  </Paper>
-                );
-              })}
-          </Box>
-        )}
-      </Box>
+                            <Grid item xs={12} sm={6}>
+                              <Box
+                                sx={{
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  gap: 1,
+                                }}
+                              >
+                                <Box
+                                  sx={{
+                                    display: "flex",
+                                    gap: 1,
+                                    flexWrap: "wrap",
+                                  }}
+                                >
+                                  <Chip
+                                    label={scrim.format}
+                                    size="small"
+                                    color="primary"
+                                    variant="outlined"
+                                  />
+                                  <Chip
+                                    label={formatTime(scrim.scheduledTime)}
+                                    size="small"
+                                    icon={<AccessTime />}
+                                  />
+                                </Box>
+
+                                <Box
+                                  sx={{
+                                    display: "flex",
+                                    gap: 1,
+                                    flexWrap: "wrap",
+                                  }}
+                                >
+                                  {isMyScrim ? (
+                                    <>
+                                      <Button
+                                        size="small"
+                                        variant="outlined"
+                                        onClick={() =>
+                                          navigate(
+                                            `/scrims/${scrim._id}/requests`
+                                          )
+                                        }
+                                      >
+                                        View Requests
+                                      </Button>
+                                      <Button
+                                        size="small"
+                                        variant="outlined"
+                                        onClick={() =>
+                                          handleEditScrim(scrim._id)
+                                        }
+                                      >
+                                        Edit
+                                      </Button>
+                                    </>
+                                  ) : (
+                                    <Button
+                                      size="small"
+                                      variant="contained"
+                                      onClick={() =>
+                                        handleSendRequest(scrim._id)
+                                      }
+                                      disabled={
+                                        isRequested || !selectedRequestTeam
+                                      }
+                                    >
+                                      {isRequested
+                                        ? "Requested"
+                                        : "Send Request"}
+                                    </Button>
+                                  )}
+                                </Box>
+                              </Box>
+                            </Grid>
+                          </Grid>
+                        </CardContent>
+                      </Card>
+                    </ListItem>
+                  );
+                })}
+              </List>
+            )}
+          </Paper>
+        </Grid>
+      </Grid>
     </Container>
   );
 };

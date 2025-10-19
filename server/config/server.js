@@ -242,50 +242,41 @@ class OrphanedCleanup {
               );
             }
           } else {
-            if (tournament.referees && tournament.referees.length > 0) {
-              const validReferees = tournament.referees.filter(
-                (ref) => ref._id
-              );
-
-              if (
-                validReferees.length < tournament.referees.length &&
-                !dryRun
-              ) {
-                tournament.referees = validReferees.map((ref) => ref._id);
-                await tournament.save();
-                if (verbose) {
-                  console.log(
-                    `Cleaned deleted referees from tournament: ${tournament.name}`
-                  );
+            if (Match) {
+              const matches = await Match.find({ tournament: tournament._id });
+              for (const match of matches) {
+                let matchOrphaned = false;
+                if (
+                  match.teamA &&
+                  !tournament.teams.some((t) => t.toString() === match.teamA.toString())
+                ) {
+                  matchOrphaned = true;
                 }
-              }
-            }
-          }
-        }
+                if (
+                  match.teamB &&
+                  !tournament.teams.some((t) => t.toString() === match.teamB.toString())
+                ) {
+                  matchOrphaned = true;
+                }
 
-        if (Match) {
-          const orphanedMatches = await Match.find({}).populate(
-            "tournament",
-            "_id"
-          );
+                if (matchOrphaned) {
+                  results.orphanedMatches.push({
+                    matchId: match._id,
+                    tournamentId: tournament._id,
+                  });
 
-          for (const match of orphanedMatches) {
-            if (!match.tournament) {
-              results.orphanedMatches.push({
-                matchId: match._id,
-                reason: "Tournament deleted",
-              });
+                  if (!dryRun) {
+                    await Match.findByIdAndDelete(match._id);
+                  }
 
-              if (!dryRun) {
-                await Match.findByIdAndDelete(match._id);
-              }
-
-              if (verbose) {
-                console.log(
-                  `${dryRun ? "Found" : "Deleted"} orphaned match: ${
-                    match._id
-                  }`
-                );
+                  if (verbose) {
+                    console.log(
+                      `${dryRun ? "Found" : "Deleted"} orphaned match: ${
+                        match._id
+                      }`
+                    );
+                  }
+                }
               }
             }
           }
@@ -914,6 +905,7 @@ app.use((err, req, res, next) => {
   });
 });
 
+// ✅ FIXED: Complete 404 handler with proper callback function
 app.use("*", (req, res) => {
   console.log(`404 - Route not found: ${req.method} ${req.originalUrl}`);
 

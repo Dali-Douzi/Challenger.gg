@@ -15,9 +15,6 @@ import {
   Alert,
 } from "@mui/material";
 
-import { getApiBaseUrl } from '../services/apiClient';
-const API_BASE = getApiBaseUrl();
-
 const ScrimRequests = () => {
   const { scrimId } = useParams();
   const navigate = useNavigate();
@@ -68,9 +65,9 @@ const ScrimRequests = () => {
     setActionLoading((prev) => ({ ...prev, [teamId]: true }));
     try {
       // PUT /api/scrims/accept/:scrimId or /api/scrims/decline/:scrimId
-      await api.put(`/api/scrims/${action}/${scrimId}`, { teamId });
+      const response = await api.put(`/api/scrims/${action}/${scrimId}`, { teamId });
       
-      console.log(`🔍 ${action} response:`, response.data);
+      console.log(`🔍 ${action} response:`, response);
       
       setRequests((prev) => prev.filter((r) => r.id !== teamId));
       

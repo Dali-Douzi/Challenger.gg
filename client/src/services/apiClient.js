@@ -1,17 +1,13 @@
-// src/services/apiClient.js
-
-/**
- * Centralized API client for all HTTP requests
- * Handles base URL configuration, credentials, and common headers
- */
-
-// Get the API base URL based on environment
 export const getApiBaseUrl = () => {
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL;
   }
   
   if (import.meta.env.MODE === 'production') {
+    // Validate production environment
+    if (!window.location.origin || window.location.origin.includes('localhost')) {
+      console.error('Production environment detected but origin is localhost');
+    }
     return window.location.origin;
   }
   
@@ -74,7 +70,7 @@ export const apiRequest = async (url, options = {}) => {
         }
       }
       
-      // Refresh failed or other auth error
+      // Refresh failed or other auth error - FIXED
       throw new ApiError('Authentication failed', 401);
     }
 

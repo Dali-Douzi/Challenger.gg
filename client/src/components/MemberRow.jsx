@@ -1,24 +1,27 @@
-import React, { useContext, useState } from "react";
+import React, { useState } from "react";
 import {
   ListItem,
   ListItemAvatar,
-  Avatar,
   ListItemText,
+  Avatar,
   CircularProgress,
   Box,
 } from "@mui/material";
-import AuthContext from "../context/AuthContext";
+import { useAuth } from "../context/AuthContext";
 import RoleDropdown from "./RoleDropdown";
 import RankDropdown from "./RankDropdown";
+import { getApiBaseUrl } from '../services/apiClient';
+
+const API_BASE = getApiBaseUrl();
 
 const MemberRow = ({
   member,
-  teamId,
   currentUserRole,
   availableRanks,
+  teamId,
   onMemberChange,
 }) => {
-  const { user, makeAuthenticatedRequest } = useContext(AuthContext);
+  const { user, makeAuthenticatedRequest } = useAuth();
   const [loading, setLoading] = useState(false);
   const [avatarError, setAvatarError] = useState(false);
 
@@ -26,7 +29,7 @@ const MemberRow = ({
     setLoading(true);
     try {
       const res = await makeAuthenticatedRequest(
-        `${API_BASE}/api/teams/${teamId}/members/${member._id}/rank`,
+        `${API_BASE}/api/teams/${teamId}/members/${member.user._id}/rank`,
         {
           method: "PUT",
           headers: {
@@ -37,7 +40,7 @@ const MemberRow = ({
       );
       if (!res.ok) {
         const errorData = await res.json();
-        throw new Error(errorData.message || "Failed to update rank");
+        throw new Error(errorData.message || "Failed to change rank");
       }
       onMemberChange();
     } catch (err) {
@@ -52,7 +55,7 @@ const MemberRow = ({
     setLoading(true);
     try {
       const res = await makeAuthenticatedRequest(
-        `${API_BASE}/api/teams/${teamId}/members/${member._id}/role`,
+        `${API_BASE}/api/teams/${teamId}/members/${member.user._id}/role`,
         {
           method: "PUT",
           headers: {
@@ -63,7 +66,7 @@ const MemberRow = ({
       );
       if (!res.ok) {
         const errorData = await res.json();
-        throw new Error(errorData.message || "Failed to update role");
+        throw new Error(errorData.message || "Failed to change role");
       }
       onMemberChange();
     } catch (err) {
@@ -76,9 +79,7 @@ const MemberRow = ({
 
   const handleKick = async () => {
     if (
-      !window.confirm(
-        `Are you sure you want to remove ${member.user.username} from the team?`
-      )
+      !window.confirm(`Are you sure you want to kick ${member.user.username}?`)
     ) {
       return;
     }
@@ -86,14 +87,14 @@ const MemberRow = ({
     setLoading(true);
     try {
       const res = await makeAuthenticatedRequest(
-        `${API_BASE}/api/teams/${teamId}/members/${member._id}`,
+        `${API_BASE}/api/teams/${teamId}/members/${member.user._id}`,
         {
           method: "DELETE",
         }
       );
       if (!res.ok) {
         const errorData = await res.json();
-        throw new Error(errorData.message || "Failed to remove member");
+        throw new Error(errorData.message || "Failed to kick member");
       }
       onMemberChange();
     } catch (err) {
@@ -105,14 +106,18 @@ const MemberRow = ({
   };
 
   const handleLeave = async () => {
-    if (!window.confirm("Are you sure you want to leave this team?")) {
+    if (
+      !window.confirm(
+        "Are you sure you want to leave this team? This action cannot be undone."
+      )
+    ) {
       return;
     }
 
     setLoading(true);
     try {
       const res = await makeAuthenticatedRequest(
-        `http://localhost:4444/api/teams/${teamId}/members/self`,
+        `${API_BASE}/api/teams/${teamId}/members/self`,
         {
           method: "DELETE",
         }

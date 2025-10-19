@@ -67,7 +67,7 @@ const avatarUpload = multer({
   },
 });
 
-// Error handler wrapper for multer
+// ✅ FIXED: Complete error handler wrapper for multer
 const handleUpload = (req, res, next) => {
   avatarUpload.single("avatar")(req, res, (err) => {
     if (err) {

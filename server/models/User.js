@@ -29,6 +29,10 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    discordAvatar: {
+      type: String,
+      default: "",
+    },
     teams: {
       type: [mongoose.Schema.Types.ObjectId],
       ref: "Team",

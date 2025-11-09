@@ -10,6 +10,17 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
+// Helper function to format user response
+const formatUserResponse = (user) => ({
+  id: user._id,
+  username: user.username,
+  email: user.email,
+  avatar: user.avatar,
+  discordAvatar: user.discordAvatar,
+  teams: user.teams,
+  createdAt: user.createdAt,
+});
+
 // Helper Functions
 const sanitizeInput = (input) => {
   if (typeof input !== "string") return input;
@@ -265,13 +276,7 @@ exports.signup = async (req, res) => {
     res.status(201).json({
       success: true,
       message: "User registered successfully",
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-        avatar: user.avatar,
-        teams: user.teams,
-      },
+      user: formatUserResponse(user),
     });
   } catch (error) {
     console.error("Signup error:", error);
@@ -325,13 +330,7 @@ exports.login = async (req, res) => {
     res.json({
       success: true,
       message: "Login successful",
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-        avatar: user.avatar,
-        teams: user.teams,
-      },
+      user: formatUserResponse(user),
     });
   } catch (error) {
     console.error("Login error:", error);
@@ -381,13 +380,7 @@ exports.refresh = async (req, res) => {
     res.json({
       success: true,
       message: "Token refreshed successfully",
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-        avatar: user.avatar,
-        teams: user.teams,
-      },
+      user: formatUserResponse(user),
     });
   } catch (error) {
     console.error("Token refresh error:", error);
@@ -437,14 +430,7 @@ exports.getProfile = async (req, res) => {
 
     res.json({
       success: true,
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-        avatar: user.avatar,
-        teams: user.teams,
-        createdAt: user.createdAt,
-      },
+      user: formatUserResponse(user),
     });
   } catch (error) {
     console.error("Get profile error:", error);
@@ -470,13 +456,7 @@ exports.getMe = async (req, res) => {
 
     res.json({
       success: true,
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-        avatar: user.avatar,
-        teams: user.teams,
-      },
+      user: formatUserResponse(user),
     });
   } catch (error) {
     console.error("Get user error:", error);
@@ -536,13 +516,7 @@ exports.changeEmail = async (req, res) => {
     res.json({
       success: true,
       message: "Email updated successfully",
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-        avatar: user.avatar,
-        teams: user.teams,
-      },
+      user: formatUserResponse(user),
     });
   } catch (error) {
     console.error("Change email error:", error);
@@ -663,13 +637,7 @@ exports.changeUsername = async (req, res) => {
     res.json({
       success: true,
       message: "Username updated successfully",
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-        avatar: user.avatar,
-        teams: user.teams,
-      },
+      user: formatUserResponse(user),
     });
   } catch (error) {
     console.error("Change username error:", error);
@@ -712,13 +680,7 @@ exports.changeAvatar = async (req, res) => {
     res.json({
       success: true,
       message: "Avatar updated successfully",
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-        avatar: user.avatar,
-        teams: user.teams,
-      },
+      user: formatUserResponse(user),
     });
   } catch (error) {
     console.error("Change avatar error:", error);
@@ -751,13 +713,7 @@ exports.deleteAvatar = async (req, res) => {
     res.json({
       success: true,
       message: "Avatar deleted successfully",
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-        avatar: user.avatar,
-        teams: user.teams,
-      },
+      user: formatUserResponse(user),
     });
   } catch (error) {
     console.error("Delete avatar error:", error);

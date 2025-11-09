@@ -187,6 +187,7 @@ exports.unlinkProvider = async (req, res) => {
         break;
       case "discord":
         user.discordId = undefined;
+        user.discordAvatar = undefined; // Also remove Discord avatar
         break;
       case "twitch":
         user.twitchId = undefined;

@@ -103,12 +103,26 @@ if (process.env.DISCORD_CLIENT_ID && process.env.DISCORD_CLIENT_SECRET) {
         try {
           console.log("Discord OAuth callback triggered");
           console.log("Profile ID:", profile.id);
+          console.log("Profile avatar:", profile.avatar);
+
+          // Construct Discord avatar URL
+          const discordAvatarUrl = profile.avatar 
+            ? `https://cdn.discordapp.com/avatars/${profile.id}/${profile.avatar}.${profile.avatar.startsWith('a_') ? 'gif' : 'png'}?size=256`
+            : null;
+
+          console.log("Discord avatar URL:", discordAvatarUrl);
 
           // Check if user already exists with this Discord ID
           let user = await User.findOne({ discordId: profile.id });
 
           if (user) {
             console.log("Existing Discord user found:", user.email);
+            // Update Discord avatar on every login
+            if (discordAvatarUrl) {
+              user.discordAvatar = discordAvatarUrl;
+              await user.save();
+              console.log("Discord avatar updated:", discordAvatarUrl);
+            }
             return done(null, user);
           }
 
@@ -124,8 +138,12 @@ if (process.env.DISCORD_CLIENT_ID && process.env.DISCORD_CLIENT_SECRET) {
             // Link Discord account to existing user
             console.log("Linking Discord account to existing user:", email);
             user.discordId = profile.id;
-            if (!user.avatar && profile.avatar) {
-              user.avatar = `https://cdn.discordapp.com/avatars/${profile.id}/${profile.avatar}.png`;
+            if (discordAvatarUrl) {
+              user.discordAvatar = discordAvatarUrl;
+              // Only set general avatar if none exists
+              if (!user.avatar) {
+                user.avatar = discordAvatarUrl;
+              }
             }
             await user.save();
             return done(null, user);
@@ -145,7 +163,8 @@ if (process.env.DISCORD_CLIENT_ID && process.env.DISCORD_CLIENT_SECRET) {
             email,
             password: hashedPassword,
             discordId: profile.id,
-            avatar: profile.avatar ? `https://cdn.discordapp.com/avatars/${profile.id}/${profile.avatar}.png` : "",
+            discordAvatar: discordAvatarUrl || "",
+            avatar: discordAvatarUrl || "",
             authProvider: "discord",
             teams: [],
           });

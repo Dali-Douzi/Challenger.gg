@@ -1,4 +1,6 @@
 const express = require("express");
+const http = require("http");
+const { Server } = require("socket.io");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const path = require("path");
@@ -9,6 +11,7 @@ const compression = require("compression");
 const session = require("express-session");
 const MongoStore = require("connect-mongo");
 const cron = require("node-cron");
+const jwt = require("jsonwebtoken");
 
 // Load environment variables with explicit path
 require("dotenv").config({ path: path.join(__dirname, '../.env') });
@@ -27,6 +30,8 @@ const gameRoutes = require("../routes/gameRoutes");
 const teamRoutes = require("../routes/teamRoutes");
 const scrimRoutes = require("../routes/scrimRoutes");
 const tournamentRoutes = require("../routes/tournamentRoutes");
+const notificationRoutes = require("../routes/notificationRoutes");
+const scrimChatRoutes = require("../routes/scrimChatRoutes");
 const seedGames = require("./dbSeeder");
 
 const app = express();
@@ -36,6 +41,8 @@ let cleanupTask = null;
 const SCRIM_RETENTION_DAYS = parseInt(process.env.SCRIM_RETENTION_DAYS) || 90;
 const TOURNAMENT_RETENTION_DAYS =
   parseInt(process.env.TOURNAMENT_RETENTION_DAYS) || 365;
+const NOTIFICATION_RETENTION_DAYS = 
+  parseInt(process.env.NOTIFICATION_RETENTION_DAYS) || 30;
 
 class OrphanedCleanup {
   static async cleanup(options = { dryRun: false, verbose: false }) {
@@ -46,6 +53,7 @@ class OrphanedCleanup {
       orphanedTournaments: [],
       orphanedMatches: [],
       cleanedNotifications: 0,
+      cleanedOldNotifications: 0,
       cleanedChats: 0,
       cleanedOldScrims: 0,
       cleanedOldTournaments: 0,
@@ -57,6 +65,7 @@ class OrphanedCleanup {
       console.log(`Mode: ${dryRun ? "DRY RUN" : "LIVE CLEANUP"}`);
       console.log(`Scrim retention: ${SCRIM_RETENTION_DAYS} days`);
       console.log(`Tournament retention: ${TOURNAMENT_RETENTION_DAYS} days`);
+      console.log(`Notification retention: ${NOTIFICATION_RETENTION_DAYS} days`);
     }
 
     try {
@@ -330,7 +339,18 @@ class OrphanedCleanup {
         results.cleanedOldScrims = oldScrims.length;
       }
 
+      // Clean up old read notifications
+      const notificationCutoff = new Date(
+        Date.now() - NOTIFICATION_RETENTION_DAYS * 24 * 60 * 60 * 1000
+      );
+
       if (!dryRun) {
+        const oldReadNotifications = await Notification.deleteMany({
+          createdAt: { $lt: notificationCutoff },
+          read: true,
+        });
+        results.cleanedOldNotifications = oldReadNotifications.deletedCount;
+
         const orphanedNotifications = await Notification.deleteMany({
           scrim: { $exists: false },
         });
@@ -340,6 +360,12 @@ class OrphanedCleanup {
           scrim: { $exists: false },
         });
         results.cleanedChats += orphanedChats.deletedCount;
+      } else {
+        const oldReadNotifications = await Notification.countDocuments({
+          createdAt: { $lt: notificationCutoff },
+          read: true,
+        });
+        results.cleanedOldNotifications = oldReadNotifications;
       }
 
       if (verbose) {
@@ -356,6 +382,9 @@ class OrphanedCleanup {
         );
         console.log(
           `   • Old Tournaments (${TOURNAMENT_RETENTION_DAYS}+ days): ${results.cleanedOldTournaments}`
+        );
+        console.log(
+          `   • Old Read Notifications (${NOTIFICATION_RETENTION_DAYS}+ days): ${results.cleanedOldNotifications}`
         );
         console.log(
           `   • Orphaned Notifications: ${results.cleanedNotifications}`
@@ -394,7 +423,8 @@ const startCleanupScheduler = () => {
           results.orphanedTournaments.length +
           results.orphanedMatches.length +
           results.cleanedOldScrims +
-          results.cleanedOldTournaments;
+          results.cleanedOldTournaments +
+          results.cleanedOldNotifications;
 
         if (totalCleaned > 0) {
           console.log(
@@ -418,6 +448,7 @@ const startCleanupScheduler = () => {
   console.log("Cleanup scheduler started - daily at 2:00 AM UTC");
   console.log(`Scrim retention: ${SCRIM_RETENTION_DAYS} days`);
   console.log(`Tournament retention: ${TOURNAMENT_RETENTION_DAYS} days`);
+  console.log(`Notification retention: ${NOTIFICATION_RETENTION_DAYS} days`);
 };
 
 const gracefulShutdown = (signal) => {
@@ -428,9 +459,15 @@ const gracefulShutdown = (signal) => {
     console.log("Cleanup scheduler stopped");
   }
 
-  const server = app.listen(PORT);
   server.close(() => {
     console.log("HTTP server closed");
+
+    // Close Socket.IO
+    if (io) {
+      io.close(() => {
+        console.log("Socket.IO closed");
+      });
+    }
 
     mongoose.connection.close(() => {
       console.log("MongoDB connection closed");
@@ -581,6 +618,100 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 connectDB();
 
+// ✅ CREATE HTTP SERVER AND SOCKET.IO
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: corsOptions,
+  pingTimeout: 60000,
+  pingInterval: 25000,
+});
+
+// ✅ MAKE SOCKET.IO AVAILABLE TO ROUTES
+app.set("io", io);
+
+// ✅ SOCKET.IO AUTHENTICATION MIDDLEWARE
+io.use((socket, next) => {
+  try {
+    const token = socket.handshake.auth.token;
+    
+    if (!token) {
+      return next(new Error("Authentication error: No token provided"));
+    }
+    
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    socket.userId = decoded.userId;
+    socket.username = decoded.username;
+    
+    console.log(`🔐 Socket authenticated: ${socket.username} (${socket.userId})`);
+    next();
+  } catch (err) {
+    console.error("Socket authentication failed:", err.message);
+    next(new Error("Authentication error: Invalid token"));
+  }
+});
+
+// ✅ SOCKET.IO CONNECTION HANDLING
+io.on("connection", (socket) => {
+  console.log(`🔌 User connected: ${socket.username} (${socket.id})`);
+  
+  // Join a chat room
+  socket.on("joinChat", (chatId) => {
+    socket.join(chatId);
+    console.log(`💬 ${socket.username} joined chat: ${chatId}`);
+    
+    // Notify others in the room
+    socket.to(chatId).emit("userJoined", {
+      userId: socket.userId,
+      username: socket.username,
+    });
+  });
+  
+  // Leave a chat room
+  socket.on("leaveChat", (chatId) => {
+    socket.leave(chatId);
+    console.log(`💬 ${socket.username} left chat: ${chatId}`);
+    
+    // Notify others in the room
+    socket.to(chatId).emit("userLeft", {
+      userId: socket.userId,
+      username: socket.username,
+    });
+  });
+  
+  // Typing indicator
+  socket.on("typing", ({ chatId, isTyping }) => {
+    socket.to(chatId).emit("userTyping", {
+      userId: socket.userId,
+      username: socket.username,
+      isTyping,
+    });
+  });
+  
+  // Join team notification room
+  socket.on("joinTeam", (teamId) => {
+    const roomName = `team:${teamId}`;
+    socket.join(roomName);
+    console.log(`👥 ${socket.username} joined team room: ${roomName}`);
+  });
+  
+  // Leave team notification room
+  socket.on("leaveTeam", (teamId) => {
+    const roomName = `team:${teamId}`;
+    socket.leave(roomName);
+    console.log(`👥 ${socket.username} left team room: ${roomName}`);
+  });
+  
+  socket.on("disconnect", () => {
+    console.log(`🔌 User disconnected: ${socket.username} (${socket.id})`);
+  });
+  
+  socket.on("error", (error) => {
+    console.error(`Socket error for ${socket.username}:`, error);
+  });
+});
+
+console.log("✅ Socket.IO initialized and configured");
+
 app.get("/health", async (req, res) => {
   const healthCheck = {
     success: true,
@@ -592,6 +723,7 @@ app.get("/health", async (req, res) => {
     memory: process.memoryUsage(),
     mongoStatus:
       mongoose.connection.readyState === 1 ? "connected" : "disconnected",
+    socketIOStatus: io ? "active" : "inactive",
   };
 
   try {
@@ -600,6 +732,7 @@ app.get("/health", async (req, res) => {
       schedule: "Daily at 2:00 AM UTC",
       scrimRetentionDays: SCRIM_RETENTION_DAYS,
       tournamentRetentionDays: TOURNAMENT_RETENTION_DAYS,
+      notificationRetentionDays: NOTIFICATION_RETENTION_DAYS,
     };
 
     healthCheck.oauthProviders = {
@@ -686,6 +819,8 @@ app.get("/", (req, res) => {
     "Automatic data cleanup",
     "Tournament management",
     "Match tracking",
+    "Real-time messaging (Socket.IO)",
+    "Real-time notifications",
   ];
 
   const endpoints = [
@@ -697,17 +832,21 @@ app.get("/", (req, res) => {
     "/api/scrims",
     "/api/tournaments",
     "/api/teams/games",
+    "/api/notifications",
+    "/api/chats",
     "/api/cleanup",
     "/health",
   ];
 
   res.json({
     message: "Challenger API is running!",
-    version: "2.2.0",
+    version: "2.3.0",
     features,
     endpoints,
     scrimRetentionDays: SCRIM_RETENTION_DAYS,
     tournamentRetentionDays: TOURNAMENT_RETENTION_DAYS,
+    notificationRetentionDays: NOTIFICATION_RETENTION_DAYS,
+    socketIO: "enabled",
   });
 });
 
@@ -724,6 +863,7 @@ app.get("/api/test", (req, res) => {
       compression: true,
       cleanup: !!cleanupTask,
       tournaments: true,
+      socketIO: !!io,
       oauth: {
         google: !!(
           process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
@@ -738,6 +878,7 @@ app.get("/api/test", (req, res) => {
     },
     scrimRetentionDays: SCRIM_RETENTION_DAYS,
     tournamentRetentionDays: TOURNAMENT_RETENTION_DAYS,
+    notificationRetentionDays: NOTIFICATION_RETENTION_DAYS,
   });
 });
 
@@ -765,12 +906,15 @@ app.get("/api/seed-games", async (req, res) => {
   }
 });
 
+// ✅ REGISTER ALL ROUTES
 app.use("/api/auth", authRoutes);
 app.use("/api/auth", oauthRoutes);
 app.use("/api/teams", teamRoutes);
 app.use("/api/scrims", scrimRoutes);
 app.use("/api/tournaments", tournamentRoutes);
 app.use("/api/games", gameRoutes);
+app.use("/api/notifications", notificationRoutes);
+app.use("/api/chats", scrimChatRoutes);
 
 app.get("/api/cleanup/status", async (req, res) => {
   try {
@@ -780,6 +924,7 @@ app.get("/api/cleanup/status", async (req, res) => {
       lastRun: "Check server logs",
       scrimRetentionDays: SCRIM_RETENTION_DAYS,
       tournamentRetentionDays: TOURNAMENT_RETENTION_DAYS,
+      notificationRetentionDays: NOTIFICATION_RETENTION_DAYS,
     };
     res.json({ success: true, data: status });
   } catch (error) {
@@ -801,6 +946,7 @@ app.post("/api/cleanup/dry-run", async (req, res) => {
       data: results,
       scrimRetentionDays: SCRIM_RETENTION_DAYS,
       tournamentRetentionDays: TOURNAMENT_RETENTION_DAYS,
+      notificationRetentionDays: NOTIFICATION_RETENTION_DAYS,
     });
   } catch (error) {
     res.status(500).json({
@@ -823,6 +969,7 @@ app.post("/api/cleanup/run", async (req, res) => {
       data: results,
       scrimRetentionDays: SCRIM_RETENTION_DAYS,
       tournamentRetentionDays: TOURNAMENT_RETENTION_DAYS,
+      notificationRetentionDays: NOTIFICATION_RETENTION_DAYS,
     });
   } catch (error) {
     res.status(500).json({
@@ -905,7 +1052,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-// ✅ FIXED: Complete 404 handler with proper callback function
+// ✅ COMPLETE 404 HANDLER
 app.use("*", (req, res) => {
   console.log(`404 - Route not found: ${req.method} ${req.originalUrl}`);
 
@@ -934,6 +1081,11 @@ app.use("*", (req, res) => {
     "GET /api/tournaments/:id",
     "PUT /api/tournaments/:id",
     "DELETE /api/tournaments/:id",
+    "GET /api/notifications",
+    "PUT /api/notifications/:id/read",
+    "PUT /api/notifications/mark-all-read",
+    "GET /api/chats/:chatId",
+    "POST /api/chats/:chatId",
   ];
 
   res.status(404).json({
@@ -956,14 +1108,16 @@ process.on("unhandledRejection", (reason, promise) => {
   gracefulShutdown("unhandledRejection");
 });
 
-const server = app.listen(PORT, () => {
+// ✅ START SERVER (USING THE HTTP SERVER, NOT APP.LISTEN)
+server.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
   console.log(`Authentication: Cookie-based + OAuth`);
   console.log(`File Storage: Cloudinary`);
   console.log(`Security: Enabled`);
+  console.log(`Socket.IO: Enabled`);
   console.log(
-    `Cleanup: Enabled (${SCRIM_RETENTION_DAYS} day scrim retention, ${TOURNAMENT_RETENTION_DAYS} day tournament retention)`
+    `Cleanup: Enabled (${SCRIM_RETENTION_DAYS} day scrim retention, ${TOURNAMENT_RETENTION_DAYS} day tournament retention, ${NOTIFICATION_RETENTION_DAYS} day notification retention)`
   );
   console.log("Registered routes:");
   console.log("   • Auth routes: /api/auth");
@@ -973,6 +1127,8 @@ const server = app.listen(PORT, () => {
   console.log("   • Team routes: /api/teams");
   console.log("   • Scrim routes: /api/scrims");
   console.log("   • Tournament routes: /api/tournaments");
+  console.log("   • Notification routes: /api/notifications");
+  console.log("   • Chat routes: /api/chats");
   console.log("   • Cleanup routes: /api/cleanup");
   console.log("   • Games route: /api/games");
   console.log("   • Health check: /health");

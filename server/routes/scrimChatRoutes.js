@@ -199,7 +199,7 @@ router.post("/:chatId", protect, async (req, res) => {
     const senderTeamObj = await Team.findById(senderTeam);
     const senderTeamName = senderTeamObj ? senderTeamObj.name : "Unknown Team";
 
-    // Notify all other teams with Socket.IO emission
+    // ✅ Notify all other teams with Socket.IO emission to SPECIFIC team rooms
     const recipients = allTeams.filter((id) => id !== senderTeam);
     await Promise.all(
       recipients.map(async (teamId) => {
@@ -212,27 +212,29 @@ router.post("/:chatId", protect, async (req, res) => {
           url: `/chats/${chat._id}`,
         });
 
-        // 🚨 EMIT SOCKET EVENT for each recipient team
+        // ✅ EMIT SOCKET EVENT to specific team room (not broadcast)
         const io = req.app.get("io");
         if (io) {
-          io.emit("newNotification", {
+          const teamRoom = `team:${teamId}`;
+          io.to(teamRoom).emit("newNotification", {
             teamId: teamId,
             notification: notification,
           });
-          console.log(`💬 Emitted message notification to team ${teamId}`);
+          console.log(`💬 Emitted message notification to team room: ${teamRoom}`);
         }
 
         return notification;
       })
     );
 
-    // 6) Broadcast the new message back (sender populated)
+    // 6) Broadcast the new message to the chat room (for real-time chat updates)
     const io = req.app.get("io");
     if (io) {
       io.to(chatId).emit("newMessage", {
         ...msg,
         sender: senderUser,
       });
+      console.log(`💬 Emitted new message to chat room: ${chatId}`);
     }
 
     return res.status(201).json({

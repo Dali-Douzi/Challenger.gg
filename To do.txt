@@ -1,0 +1,11 @@
+Critical:
+Notification system
+Chat System
+Failed to load teams
+Scrim system broken
+Important:
+Tournament creation menu (game field issue)
+
+Secondary:
+Remove password verification for changing avatar, username, and email.
+Dashboard better alignment

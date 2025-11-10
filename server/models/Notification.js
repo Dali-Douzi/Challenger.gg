@@ -39,9 +39,12 @@ const notificationSchema = new mongoose.Schema(
   }
 );
 
-// Indexes for performance
-notificationSchema.index({ team: 1, read: 1 });
+// ✅ ENHANCED INDEXES for better performance
+notificationSchema.index({ team: 1, read: 1, createdAt: -1 });
+notificationSchema.index({ team: 1, createdAt: -1 });
 notificationSchema.index({ scrim: 1 });
 notificationSchema.index({ createdAt: -1 });
+// Compound index for efficient queries on team notifications
+notificationSchema.index({ team: 1, read: 1 });
 
 module.exports = mongoose.model("Notification", notificationSchema);

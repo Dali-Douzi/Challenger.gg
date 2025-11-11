@@ -14,7 +14,7 @@ const notificationSchema = new mongoose.Schema(
     },
     chat: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "ScrimChat",
+      ref: "Chat",
     },
     message: {
       type: String,

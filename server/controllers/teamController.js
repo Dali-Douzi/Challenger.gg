@@ -4,7 +4,7 @@ const User = require("../models/User");
 const Game = require("../models/Game");
 const Scrim = require("../models/Scrim");
 const Notification = require("../models/Notification");
-const ScrimChat = require("../models/ScrimChat");
+const Chat = require("../models/Chat");
 
 // Configure Cloudinary
 cloudinary.config({
@@ -472,7 +472,10 @@ exports.deleteTeam = async (req, res) => {
       let cleanedScrims = 0;
 
       for (const scrim of orphanedScrims) {
-        await ScrimChat.deleteMany({ scrim: scrim._id });
+        await Chat.deleteMany({
+          type: "scrim",
+          "metadata.scrimId": scrim._id,
+        });
         await Notification.deleteMany({ scrim: scrim._id });
 
         const io = req.app.get("io");

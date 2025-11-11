@@ -3,7 +3,8 @@ const Scrim = require("../models/Scrim");
 const Team = require("../models/Team");
 const Game = require("../models/Game");
 const Notification = require("../models/Notification");
-const ScrimChat = require("../models/ScrimChat");
+const Chat = require("../models/Chat");
+const eventService = require("../services/eventService");
 
 // Helper Functions
 const validateObjectId = (id, fieldName = "ID") => {
@@ -203,7 +204,9 @@ exports.requestScrim = async (req, res) => {
     validateObjectId(scrimId, "scrim ID");
     validateObjectId(teamId, "team ID");
 
-    const scrim = await Scrim.findById(scrimId).populate("teamA", "name");
+    const scrim = await Scrim.findById(scrimId)
+      .populate("teamA", "name")
+      .populate("game", "name");
     if (!scrim) {
       return res.status(404).json({
         success: false,
@@ -254,16 +257,24 @@ exports.requestScrim = async (req, res) => {
     scrim.requests.push(teamId);
     await scrim.save();
 
-    let chat = await ScrimChat.findOne({ scrim: scrim._id });
-    if (!chat) {
-      chat = new ScrimChat({ scrim: scrim._id, messages: [] });
-      await chat.save();
-    }
+    // Emit event for chat creation
+    eventService.emitScrimRequestCreated({
+      scrimId: scrim._id,
+      teamA: scrim.teamA._id,
+      teamB: teamId,
+      game: scrim.game._id,
+    });
+
+    // Find or create notification reference (chat will be created by ChatService)
+    let chat = await Chat.findOne({
+      type: "scrim",
+      "metadata.scrimId": scrim._id,
+    });
 
     const notification = await Notification.create({
       team: scrim.teamA._id,
       scrim: scrim._id,
-      chat: chat._id,
+      chat: chat ? chat._id : null,
       message: `${requestingTeam.name} requested your scrim`,
       type: "request",
       url: `/scrims/${scrim._id}/requests`,
@@ -465,10 +476,13 @@ exports.deleteScrim = async (req, res) => {
 
     console.log(`Starting cascade delete for scrim ${scrimId}`);
 
-    const chat = await ScrimChat.findOne({ scrim: scrimId });
+    const chat = await Chat.findOne({
+      type: "scrim",
+      "metadata.scrimId": scrimId,
+    });
     if (chat) {
       console.log(`Deleting chat ${chat._id} for scrim ${scrimId}`);
-      await ScrimChat.findByIdAndDelete(chat._id);
+      await Chat.findByIdAndDelete(chat._id);
 
       const io = req.app.get("io");
       if (io) {
@@ -543,7 +557,7 @@ exports.acceptScrim = async (req, res) => {
     validateObjectId(scrimId, "scrim ID");
     validateObjectId(teamId, "team ID");
 
-    const scrim = await Scrim.findById(scrimId);
+    const scrim = await Scrim.findById(scrimId).populate("game", "name");
     if (!scrim) {
       return res.status(404).json({
         success: false,
@@ -590,25 +604,35 @@ exports.acceptScrim = async (req, res) => {
     scrim.requests = [];
     await scrim.save();
 
-    let chat = await ScrimChat.findOne({ scrim: scrim._id });
+    // Emit event for chat service (if not already created)
+    eventService.emitScrimAccepted({
+      scrimId: scrim._id,
+      teamA: scrim.teamA,
+      teamB: teamId,
+      game: scrim.game._id,
+    });
+
+    let chat = await Chat.findOne({
+      type: "scrim",
+      "metadata.scrimId": scrim._id,
+    });
     if (!chat) {
-      chat = new ScrimChat({ scrim: scrim._id, messages: [] });
-      await chat.save();
-      console.log(`Created new chat for scrim ${scrim._id}:`, chat._id);
+      // Chat should have been created on request, but create if missing
+      console.log(`Chat not found for scrim ${scrim._id}, will be created by ChatService`);
     }
 
     const [acceptNotification, feedbackNotification] = await Promise.all([
       Notification.create({
         team: teamId,
         scrim: scrim._id,
-        chat: chat._id,
+        chat: chat ? chat._id : null,
         message: `${postingTeam.name} accepted your scrim request`,
         type: "accept",
       }),
       Notification.create({
         team: scrim.teamA,
         scrim: scrim._id,
-        chat: chat._id,
+        chat: chat ? chat._id : null,
         message: `You accepted ${requestingTeam.name}'s request`,
         type: "accept-feedback",
       }),
@@ -704,16 +728,15 @@ exports.declineScrim = async (req, res) => {
     scrim.requests = scrim.requests.filter((id) => id.toString() !== teamId);
     await scrim.save();
 
-    let chat = await ScrimChat.findOne({ scrim: scrim._id });
-    if (!chat) {
-      chat = new ScrimChat({ scrim: scrim._id, messages: [] });
-      await chat.save();
-    }
+    let chat = await Chat.findOne({
+      type: "scrim",
+      "metadata.scrimId": scrim._id,
+    });
 
     const notification = await Notification.create({
       team: teamId,
       scrim: scrim._id,
-      chat: chat._id,
+      chat: chat ? chat._id : null,
       message: `${team.name} declined your scrim request`,
       type: "decline",
       url: "/chats",

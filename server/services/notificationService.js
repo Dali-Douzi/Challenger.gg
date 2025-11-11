@@ -47,7 +47,8 @@ class NotificationService {
         (teamId) => teamId !== senderTeam?.toString()
       );
 
-      const io = require("../config/server").io;
+      // Get Socket.IO from eventService
+      const io = eventService.getIO();
 
       // Create notification for each recipient team
       await Promise.all(
@@ -96,8 +97,8 @@ class NotificationService {
         url,
       });
 
-      // Emit to team room
-      const io = require("../config/server").io;
+      // Emit to team room using eventService IO
+      const io = eventService.getIO();
       if (io) {
         const teamRoom = `team:${teamId}`;
         io.to(teamRoom).emit("newNotification", {

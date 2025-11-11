@@ -22,7 +22,6 @@ console.log("📂 Looking for .env at:", path.join(__dirname, '../.env'));
 console.log("🔍 MONGO_URI:", process.env.MONGO_URI ? "✅ LOADED" : "❌ NOT FOUND");
 console.log("🔍 JWT_SECRET:", process.env.JWT_SECRET ? "✅ LOADED" : "❌ NOT FOUND");
 console.log("🔍 CLOUDINARY_CLOUD_NAME:", process.env.CLOUDINARY_CLOUD_NAME ? "✅ LOADED" : "❌ NOT FOUND");
-console.log("🔍 Environment keys containing MONGO or JWT:", Object.keys(process.env).filter(k => k.includes('MONGO') || k.includes('JWT')));
 
 const authRoutes = require("../routes/authRoutes");
 const oauthRoutes = require("../routes/oauthRoutes");
@@ -31,8 +30,11 @@ const teamRoutes = require("../routes/teamRoutes");
 const scrimRoutes = require("../routes/scrimRoutes");
 const tournamentRoutes = require("../routes/tournamentRoutes");
 const notificationRoutes = require("../routes/notificationRoutes");
-const scrimChatRoutes = require("../routes/scrimChatRoutes");
+const chatRoutes = require("../routes/chatRoutes");
 const seedGames = require("./dbSeeder");
+
+// Import event service (needs to be imported before services that use it)
+const eventService = require("../services/eventService");
 
 const app = express();
 const PORT = process.env.PORT || 4444;
@@ -73,7 +75,7 @@ class OrphanedCleanup {
       const Scrim = require("../models/Scrim");
       const User = require("../models/User");
       const Notification = require("../models/Notification");
-      const ScrimChat = require("../models/ScrimChat");
+      const Chat = require("../models/Chat");
 
       let Tournament, Match;
       try {
@@ -120,7 +122,10 @@ class OrphanedCleanup {
 
             const orphanedScrims = await Scrim.find({ teamA: team._id });
             for (const scrim of orphanedScrims) {
-              await ScrimChat.deleteMany({ scrim: scrim._id });
+              await Chat.deleteMany({
+                type: "scrim",
+                "metadata.scrimId": scrim._id,
+              });
               await Notification.deleteMany({ scrim: scrim._id });
               await Scrim.findByIdAndDelete(scrim._id);
             }
@@ -176,7 +181,10 @@ class OrphanedCleanup {
           });
 
           if (!dryRun) {
-            await ScrimChat.deleteMany({ scrim: scrim._id });
+            await Chat.deleteMany({
+              type: "scrim",
+              "metadata.scrimId": scrim._id,
+            });
             const deletedNotifications = await Notification.deleteMany({
               scrim: scrim._id,
             });
@@ -327,7 +335,10 @@ class OrphanedCleanup {
 
       if (!dryRun) {
         for (const scrim of oldScrims) {
-          await ScrimChat.deleteMany({ scrim: scrim._id });
+          await Chat.deleteMany({
+            type: "scrim",
+            "metadata.scrimId": scrim._id,
+          });
           await Notification.deleteMany({ scrim: scrim._id });
         }
 
@@ -356,8 +367,9 @@ class OrphanedCleanup {
         });
         results.cleanedNotifications += orphanedNotifications.deletedCount;
 
-        const orphanedChats = await ScrimChat.deleteMany({
-          scrim: { $exists: false },
+        const orphanedChats = await Chat.deleteMany({
+          type: "scrim",
+          "metadata.scrimId": { $exists: false },
         });
         results.cleanedChats += orphanedChats.deletedCount;
       } else {
@@ -520,7 +532,6 @@ const connectDB = async () => {
     process.exit(1);
   }
 };
-
 if (process.env.NODE_ENV === "production") {
   app.set("trust proxy", 1);
 }
@@ -626,8 +637,15 @@ const io = new Server(server, {
   pingInterval: 25000,
 });
 
-// ✅ MAKE SOCKET.IO AVAILABLE TO ROUTES
+// ✅ MAKE SOCKET.IO AVAILABLE TO ROUTES AND EVENT SERVICE
 app.set("io", io);
+eventService.setIO(io);
+
+// ✅ INITIALIZE SERVICES (after eventService has IO)
+const chatService = require("../services/chatService");
+const notificationService = require("../services/notificationService");
+console.log("✅ ChatService initialized");
+console.log("✅ NotificationService initialized");
 
 // ✅ SOCKET.IO AUTHENTICATION MIDDLEWARE
 io.use((socket, next) => {
@@ -756,7 +774,7 @@ app.get("/health", async (req, res) => {
       mongoose.model("Team").countDocuments(),
       mongoose.model("Scrim").countDocuments(),
       mongoose.model("Notification").countDocuments(),
-      mongoose.model("ScrimChat").countDocuments(),
+      mongoose.model("Chat").countDocuments(),
     ];
 
     try {
@@ -773,7 +791,7 @@ app.get("/health", async (req, res) => {
       teams: counts[1],
       scrims: counts[2],
       notifications: counts[3],
-      chatMessages: counts[4],
+      chats: counts[4],
     };
 
     if (counts.length > 5) {
@@ -821,6 +839,7 @@ app.get("/", (req, res) => {
     "Match tracking",
     "Real-time messaging (Socket.IO)",
     "Real-time notifications",
+    "Event-driven architecture",
   ];
 
   const endpoints = [
@@ -840,13 +859,14 @@ app.get("/", (req, res) => {
 
   res.json({
     message: "Challenger API is running!",
-    version: "2.3.0",
+    version: "2.4.0",
     features,
     endpoints,
     scrimRetentionDays: SCRIM_RETENTION_DAYS,
     tournamentRetentionDays: TOURNAMENT_RETENTION_DAYS,
     notificationRetentionDays: NOTIFICATION_RETENTION_DAYS,
     socketIO: "enabled",
+    eventDriven: "enabled",
   });
 });
 
@@ -864,6 +884,7 @@ app.get("/api/test", (req, res) => {
       cleanup: !!cleanupTask,
       tournaments: true,
       socketIO: !!io,
+      eventDriven: true,
       oauth: {
         google: !!(
           process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
@@ -914,7 +935,7 @@ app.use("/api/scrims", scrimRoutes);
 app.use("/api/tournaments", tournamentRoutes);
 app.use("/api/games", gameRoutes);
 app.use("/api/notifications", notificationRoutes);
-app.use("/api/chats", scrimChatRoutes);
+app.use("/api/chats", chatRoutes);
 
 app.get("/api/cleanup/status", async (req, res) => {
   try {
@@ -1084,8 +1105,9 @@ app.use("*", (req, res) => {
     "GET /api/notifications",
     "PUT /api/notifications/:id/read",
     "PUT /api/notifications/mark-all-read",
+    "GET /api/chats",
     "GET /api/chats/:chatId",
-    "POST /api/chats/:chatId",
+    "POST /api/chats/:chatId/messages",
   ];
 
   res.status(404).json({
@@ -1116,6 +1138,7 @@ server.listen(PORT, () => {
   console.log(`File Storage: Cloudinary`);
   console.log(`Security: Enabled`);
   console.log(`Socket.IO: Enabled`);
+  console.log(`Event-Driven Architecture: Enabled`);
   console.log(
     `Cleanup: Enabled (${SCRIM_RETENTION_DAYS} day scrim retention, ${TOURNAMENT_RETENTION_DAYS} day tournament retention, ${NOTIFICATION_RETENTION_DAYS} day notification retention)`
   );

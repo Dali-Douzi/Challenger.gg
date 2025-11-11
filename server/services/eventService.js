@@ -8,6 +8,7 @@ class EventService extends EventEmitter {
   constructor() {
     super();
     this.setMaxListeners(20); // Increase if you have many listeners
+    this.io = null; // Socket.IO instance
     
     // Log all events in development
     if (process.env.NODE_ENV === "development") {
@@ -15,6 +16,21 @@ class EventService extends EventEmitter {
         console.log(`📢 Event: ${event}`, data ? `(${Object.keys(data).length} keys)` : "");
       });
     }
+  }
+
+  /**
+   * Set Socket.IO instance for real-time notifications
+   */
+  setIO(io) {
+    this.io = io;
+    console.log("✅ Socket.IO instance set in EventService");
+  }
+
+  /**
+   * Get Socket.IO instance
+   */
+  getIO() {
+    return this.io;
   }
 
   /**

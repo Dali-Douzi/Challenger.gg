@@ -11,7 +11,6 @@ const compression = require("compression");
 const session = require("express-session");
 const MongoStore = require("connect-mongo");
 const cron = require("node-cron");
-const jwt = require("jsonwebtoken");
 
 // Load environment variables with explicit path
 require("dotenv").config({ path: path.join(__dirname, '../.env') });
@@ -35,6 +34,9 @@ const seedGames = require("./dbSeeder");
 
 // Import event service (needs to be imported before services that use it)
 const eventService = require("../services/eventService");
+
+// ✅ IMPORT SOCKET HANDLERS
+const { socketAuthMiddleware, initializeSocketHandlers } = require("./socketHandlers");
 
 const app = express();
 const PORT = process.env.PORT || 4444;
@@ -532,6 +534,7 @@ const connectDB = async () => {
     process.exit(1);
   }
 };
+
 if (process.env.NODE_ENV === "production") {
   app.set("trust proxy", 1);
 }
@@ -647,86 +650,11 @@ const notificationService = require("../services/notificationService");
 console.log("✅ ChatService initialized");
 console.log("✅ NotificationService initialized");
 
-// ✅ SOCKET.IO AUTHENTICATION MIDDLEWARE
-io.use((socket, next) => {
-  try {
-    const token = socket.handshake.auth.token;
-    
-    if (!token) {
-      return next(new Error("Authentication error: No token provided"));
-    }
-    
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    socket.userId = decoded.userId;
-    socket.username = decoded.username;
-    
-    console.log(`🔐 Socket authenticated: ${socket.username} (${socket.userId})`);
-    next();
-  } catch (err) {
-    console.error("Socket authentication failed:", err.message);
-    next(new Error("Authentication error: Invalid token"));
-  }
-});
+// ✅ APPLY SOCKET.IO AUTHENTICATION MIDDLEWARE
+io.use(socketAuthMiddleware);
 
-// ✅ SOCKET.IO CONNECTION HANDLING
-io.on("connection", (socket) => {
-  console.log(`🔌 User connected: ${socket.username} (${socket.id})`);
-  
-  // Join a chat room
-  socket.on("joinChat", (chatId) => {
-    socket.join(chatId);
-    console.log(`💬 ${socket.username} joined chat: ${chatId}`);
-    
-    // Notify others in the room
-    socket.to(chatId).emit("userJoined", {
-      userId: socket.userId,
-      username: socket.username,
-    });
-  });
-  
-  // Leave a chat room
-  socket.on("leaveChat", (chatId) => {
-    socket.leave(chatId);
-    console.log(`💬 ${socket.username} left chat: ${chatId}`);
-    
-    // Notify others in the room
-    socket.to(chatId).emit("userLeft", {
-      userId: socket.userId,
-      username: socket.username,
-    });
-  });
-  
-  // Typing indicator
-  socket.on("typing", ({ chatId, isTyping }) => {
-    socket.to(chatId).emit("userTyping", {
-      userId: socket.userId,
-      username: socket.username,
-      isTyping,
-    });
-  });
-  
-  // Join team notification room
-  socket.on("joinTeam", (teamId) => {
-    const roomName = `team:${teamId}`;
-    socket.join(roomName);
-    console.log(`👥 ${socket.username} joined team room: ${roomName}`);
-  });
-  
-  // Leave team notification room
-  socket.on("leaveTeam", (teamId) => {
-    const roomName = `team:${teamId}`;
-    socket.leave(roomName);
-    console.log(`👥 ${socket.username} left team room: ${roomName}`);
-  });
-  
-  socket.on("disconnect", () => {
-    console.log(`🔌 User disconnected: ${socket.username} (${socket.id})`);
-  });
-  
-  socket.on("error", (error) => {
-    console.error(`Socket error for ${socket.username}:`, error);
-  });
-});
+// ✅ INITIALIZE ALL SOCKET HANDLERS (replaces inline handlers)
+initializeSocketHandlers(io);
 
 console.log("✅ Socket.IO initialized and configured");
 

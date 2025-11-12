@@ -30,7 +30,7 @@ import teamService from "../services/teamService";
 import JoinTeamModal from "../components/JoinTeamModal";
 
 const TeamDashboard = () => {
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const [teams, setTeams] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -54,8 +54,14 @@ const TeamDashboard = () => {
   }, []);
 
   useEffect(() => {
+    if (!isAuthenticated) {
+      setError("Please log in to view your teams.");
+      setTeams([]);
+      setLoading(false);
+      return;
+    }
     fetchTeams();
-  }, [fetchTeams]);
+  }, [fetchTeams, isAuthenticated]);
 
   const handleCreateTeam = () => {
     navigate("/create-team");
@@ -92,7 +98,10 @@ const TeamDashboard = () => {
 
   const getUserRole = (team) => {
     if (!team.members || !user) return null;
-    const member = team.members.find((m) => m.user._id.toString() === user.id);
+    const member = team.members.find((m) => {
+      const uid = m.user && (m.user._id || m.user);
+      return uid && uid.toString() === user.id;
+    });
     return member?.role || "player";
   };
 

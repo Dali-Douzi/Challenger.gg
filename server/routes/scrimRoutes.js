@@ -12,6 +12,7 @@ router.post("/", scrimController.createScrim);
 router.get("/:scrimId", scrimController.getScrim);
 router.put("/:scrimId", scrimController.updateScrim);
 router.delete("/:scrimId", scrimController.deleteScrim);
+router.put("/:scrimId/complete", scrimController.completeScrim);
 
 // Scrim request management
 router.post("/request/:scrimId", scrimController.requestScrim);

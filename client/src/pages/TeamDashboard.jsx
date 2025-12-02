@@ -30,7 +30,7 @@ import teamService from "../services/teamService";
 import JoinTeamModal from "../components/JoinTeamModal";
 
 const TeamDashboard = () => {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [teams, setTeams] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -54,6 +54,7 @@ const TeamDashboard = () => {
   }, []);
 
   useEffect(() => {
+    if (authLoading) return;
     if (!isAuthenticated) {
       setError("Please log in to view your teams.");
       setTeams([]);
@@ -61,7 +62,7 @@ const TeamDashboard = () => {
       return;
     }
     fetchTeams();
-  }, [fetchTeams, isAuthenticated]);
+  }, [fetchTeams, isAuthenticated, authLoading]);
 
   const handleCreateTeam = () => {
     navigate("/create-team");
@@ -120,7 +121,7 @@ const TeamDashboard = () => {
     }
   };
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <Box
         sx={{

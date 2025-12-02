@@ -31,11 +31,12 @@ const RoleDropdown = ({
       }
     });
     // And always allow kick (unless it's themselves)
+    // FIXED: Compare memberId with currentUserId properly
     if (memberId !== currentUserId) {
       actions.push({ label: "Kick from Team", action: onKick });
     }
   } else if (currentUserRole === "manager") {
-    // Manager can only switch between player â†” substitute
+    // Manager can only switch between player ↔ substitute
     ["player", "substitute"].forEach((role) => {
       if (role !== memberRole) {
         const label = role === "player" ? "Assign Player" : "Assign Substitute";

@@ -80,7 +80,7 @@ const ScrimDashboard = () => {
   });
   const [error, setError] = useState(null);
 
-  // Visual helper for time formatting - FIXED DATE ARITHMETIC
+  // Visual helper for time formatting
   const formatTime = (dateString) => {
     const date = new Date(dateString);
     const now = new Date();
@@ -115,34 +115,81 @@ const ScrimDashboard = () => {
   useEffect(() => {
     (async () => {
       try {
-        console.log("Fetching teams...");
+        console.log("🔍 [TEAMS] Fetching teams...");
+        console.log("🔍 [TEAMS] API Base:", API_BASE);
+        console.log("🔍 [TEAMS] Token exists:", !!token);
+        
         const res = await makeAuthenticatedRequest(
           `${API_BASE}/api/teams/my`
         );
-        console.log("Teams response:", res);
+        
+        console.log("🔍 [TEAMS] Response object:", res);
+        console.log("🔍 [TEAMS] Response ok:", res?.ok);
+        console.log("🔍 [TEAMS] Response status:", res?.status);
+        
         if (res && res.ok) {
           const data = await res.json();
-          console.log("Teams data:", data);
-          const teamsArray = Array.isArray(data) ? data : data.data ? data.data : [];
+          console.log("🔍 [TEAMS] Raw response data:", data);
+          console.log("🔍 [TEAMS] Data type:", typeof data);
+          console.log("🔍 [TEAMS] Is array:", Array.isArray(data));
+          console.log("🔍 [TEAMS] Has data property:", !!data?.data);
+          console.log("🔍 [TEAMS] Has teams property:", !!data?.teams);
+          
+          // Try multiple possible response formats
+          let teamsArray = [];
+          if (Array.isArray(data)) {
+            teamsArray = data;
+            console.log("🔍 [TEAMS] Using direct array format");
+          } else if (data.data && Array.isArray(data.data)) {
+            teamsArray = data.data;
+            console.log("🔍 [TEAMS] Using data.data format");
+          } else if (data.teams && Array.isArray(data.teams)) {
+            teamsArray = data.teams;
+            console.log("🔍 [TEAMS] Using data.teams format");
+          } else {
+            console.error("❌ [TEAMS] Unknown response format:", data);
+            teamsArray = [];
+          }
+          
+          console.log("🔍 [TEAMS] Parsed teams array:", teamsArray);
+          console.log("🔍 [TEAMS] Teams count:", teamsArray.length);
+          
+          if (teamsArray.length > 0) {
+            console.log("🔍 [TEAMS] First team:", teamsArray[0]);
+            console.log("🔍 [TEAMS] First team ID:", teamsArray[0]._id);
+            console.log("🔍 [TEAMS] First team name:", teamsArray[0].name);
+            console.log("🔍 [TEAMS] First team game:", teamsArray[0].game);
+          } else {
+            console.warn("⚠️ [TEAMS] No teams in response!");
+          }
+          
           setTeams(teamsArray);
-          if (teamsArray.length > 0) setSelectedTeam(teamsArray[0]._id);
+          
+          if (teamsArray.length > 0) {
+            setSelectedTeam(teamsArray[0]._id);
+            setSelectedRequestTeam(teamsArray[0]._id);
+            console.log("✅ [TEAMS] Teams loaded successfully! Count:", teamsArray.length);
+          } else {
+            console.warn("⚠️ [TEAMS] User has no teams");
+          }
         } else {
-          console.error("Failed to fetch teams, status:", res?.status);
+          console.error("❌ [TEAMS] Response not OK, status:", res?.status);
           if (res) {
             const errorText = await res.text();
-            console.error("Error response:", errorText);
+            console.error("❌ [TEAMS] Error response:", errorText);
           }
           setTeams([]);
         }
       } catch (err) {
-        console.error("Error fetching teams:", err);
+        console.error("❌ [TEAMS] Fetch error:", err);
+        console.error("❌ [TEAMS] Error stack:", err.stack);
         setTeams([]);
       } finally {
-        console.log("Setting teams loading to false");
+        console.log("🔍 [TEAMS] Setting teams loading to false");
         setLoading((l) => ({ ...l, teams: false }));
       }
     })();
-  }, [makeAuthenticatedRequest]);
+  }, [makeAuthenticatedRequest, token, API_BASE]);
 
   // 2) Fetch all games
   useEffect(() => {
@@ -155,6 +202,18 @@ const ScrimDashboard = () => {
           console.log("GAMES →", data);
           const gamesArray = Array.isArray(data) ? data : [];
           setGames(gamesArray);
+          
+          // ✅ FIX: Initialize filters immediately
+          if (gamesArray.length > 0) {
+            const firstGame = gamesArray[0];
+            setSelectedGameFilter(firstGame.name);
+            setRankOptions(firstGame.ranks || []);
+            setServerOptions(firstGame.servers || []);
+            setFormats(firstGame.formats || []);
+            if (firstGame.formats && firstGame.formats.length > 0) {
+              setFormat(firstGame.formats[0]);
+            }
+          }
         } else {
           console.error("Failed to fetch games, status:", res.status);
           const errorText = await res.text();
@@ -170,17 +229,7 @@ const ScrimDashboard = () => {
     })();
   }, []);
 
-  // Initialize filters from first game
-  useEffect(() => {
-    if (!loading.games && games.length) {
-      const first = games[0];
-      setSelectedGameFilter(first.name);
-      setRankOptions(first.ranks || []);
-      setServerOptions(first.servers || []);
-    }
-  }, [loading.games, games]);
-
-  // 3) Auto-populate when team changes - FIXED LOGIC
+  // 3) Auto-populate when team changes
   useEffect(() => {
     console.log(
       "Team/game effect - selectedTeam:",
@@ -190,7 +239,11 @@ const ScrimDashboard = () => {
       "games length:",
       games.length
     );
-    if (!selectedTeam || !teams.length || !games.length) return;
+    
+    // ✅ FIX: Don't run if games aren't loaded yet
+    if (!selectedTeam || !teams.length || !games.length || loading.games) {
+      return;
+    }
 
     const team = teams.find((t) => t._id === selectedTeam);
     if (!team) {
@@ -200,14 +253,12 @@ const ScrimDashboard = () => {
 
     console.log("Found team:", team);
 
-    // Find the game object - team.game could be ObjectId or name
+    // Find the game object
     let gameObj = null;
 
-    // Try to find by ObjectId first
     if (team.game && team.game._id) {
       gameObj = games.find((g) => g._id === team.game._id);
     } else if (team.game) {
-      // Try to find by ObjectId string or name
       gameObj = games.find((g) => g._id === team.game || g.name === team.game);
     }
 
@@ -225,17 +276,19 @@ const ScrimDashboard = () => {
     setSelectedServerFilter(team.server || "");
     setSelectedRankFilter(team.rank || "");
 
-    // Set formats - KEY FIX: Don't override existing format
+    // Set formats
     const fmts = gameObj.formats || [];
     console.log("Setting formats:", fmts);
     setFormats(fmts);
+    
+    // ✅ FIX: Only set default format if none is selected
     if (fmts.length && !format) {
       console.log("Setting default format:", fmts[0]);
       setFormat(fmts[0]);
     }
-  }, [selectedTeam, teams, games, format]); // Added format to dependencies
+  }, [selectedTeam, teams, games, loading.games]); // ✅ FIX: Removed format from deps
 
-  // Fetch scrims
+  // Fetch scrims - ✅ FIX: Simplified dependencies
   const fetchScrims = async () => {
     console.log("fetchScrims called");
     setLoading((l) => ({ ...l, scrims: true }));
@@ -288,16 +341,21 @@ const ScrimDashboard = () => {
     }
   };
 
+  // ✅ FIX: Only fetch scrims when all data is ready
   useEffect(() => {
     console.log(
-      "Effect triggered - token:",
+      "Fetch scrims effect - token:",
       !!token,
       "games loaded:",
       !loading.games,
       "teams loaded:",
-      !loading.teams
+      !loading.teams,
+      "gameFilter:",
+      selectedGameFilter
     );
-    if (token && !loading.games && !loading.teams) {
+    
+    // Wait for initial data to load AND for a game filter to be set
+    if (token && !loading.games && !loading.teams && selectedGameFilter) {
       console.log("Calling fetchScrims");
       fetchScrims();
     }
@@ -431,7 +489,7 @@ const ScrimDashboard = () => {
     window.location.href = "/scrims/edit";
   };
 
-  // Game filter change - FIXED TO UPDATE FORMATS
+  // Game filter change
   const handleGameChange = (gameName) => {
     console.log("Game changed to:", gameName);
     setSelectedGameFilter(gameName);
@@ -442,7 +500,7 @@ const ScrimDashboard = () => {
     setSelectedServerFilter("");
     setSelectedRankFilter("");
 
-    // Also update formats when game changes - KEY FIX
+    // Update formats when game changes
     const fmts = game.formats || [];
     console.log("Setting formats for game:", fmts);
     setFormats(fmts);
@@ -509,6 +567,7 @@ const ScrimDashboard = () => {
     );
   };
 
+  // ✅ FIX: Show loading only when teams OR games are loading
   if (loading.teams || loading.games) {
     return (
       <Box sx={{ p: 4, textAlign: "center" }}>
@@ -521,10 +580,57 @@ const ScrimDashboard = () => {
           Teams: {loading.teams ? "Loading..." : "✓"}
           <br />
           Games: {loading.games ? "Loading..." : "✓"}
-          <br />
-          Scrims: {loading.scrims ? "Loading..." : "✓"}
         </Typography>
       </Box>
+    );
+  }
+
+  // ✅ FIX: Show message if no teams
+  if (teams.length === 0) {
+    return (
+      <Container maxWidth="xl" sx={{ py: 4 }}>
+        <Typography variant="h4" gutterBottom>
+          Scrim Dashboard
+        </Typography>
+        <Paper sx={{ p: 4, textAlign: "center" }}>
+          <Typography variant="h6" gutterBottom>
+            No Teams Found
+          </Typography>
+          <Typography color="text.secondary" sx={{ mb: 3 }}>
+            You need to create or join a team before you can post or request scrims.
+          </Typography>
+          <Button
+            variant="contained"
+            onClick={() => {
+              console.log("🔍 [NAV] Attempting navigation to /teams/create");
+              console.log("🔍 [NAV] Navigator object:", navigate);
+              try {
+                navigate("/teams/create");
+                console.log("✅ [NAV] Navigation called successfully");
+              } catch (err) {
+                console.error("❌ [NAV] Navigation error:", err);
+                // Fallback to direct navigation
+                console.log("🔍 [NAV] Trying window.location fallback");
+                window.location.href = "/teams/create";
+              }
+            }}
+          >
+            Create a Team
+          </Button>
+          
+          {/* Debug info */}
+          <Box sx={{ mt: 4, p: 2, bgcolor: 'grey.100', borderRadius: 1, textAlign: 'left' }}>
+            <Typography variant="caption" component="pre" sx={{ fontSize: '0.7rem' }}>
+              Debug Info:{'\n'}
+              - Loading: {JSON.stringify(loading, null, 2)}{'\n'}
+              - Teams Array Length: {teams.length}{'\n'}
+              - Teams Array: {JSON.stringify(teams, null, 2)}{'\n'}
+              - Token Exists: {!!token ? 'Yes' : 'No'}{'\n'}
+              - API Base: {API_BASE}
+            </Typography>
+          </Box>
+        </Paper>
+      </Container>
     );
   }
 
@@ -597,6 +703,7 @@ const ScrimDashboard = () => {
                   value={format}
                   onChange={(e) => setFormat(e.target.value)}
                   label="Format"
+                  disabled={formats.length === 0}
                 >
                   {formats.map((f) => (
                     <MenuItem key={f} value={f}>
@@ -770,6 +877,7 @@ const ScrimDashboard = () => {
             {loading.scrims ? (
               <Box sx={{ textAlign: "center", py: 4 }}>
                 <CircularProgress />
+                <Typography sx={{ mt: 2 }}>Loading scrims...</Typography>
               </Box>
             ) : scrims.length === 0 ? (
               <Typography sx={{ textAlign: "center", py: 4, opacity: 0.6 }}>

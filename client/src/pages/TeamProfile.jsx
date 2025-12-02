@@ -308,7 +308,7 @@ const TeamProfile = () => {
                   .filter((member) => member.user)
                   .map((member) => (
                     <MemberRow
-                      key={member.user._id}
+                      key={member._id}
                       member={member}
                       teamId={id}
                       currentUserRole={

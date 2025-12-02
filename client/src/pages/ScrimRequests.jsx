@@ -71,14 +71,24 @@ const ScrimRequests = () => {
       
       setRequests((prev) => prev.filter((r) => r.id !== teamId));
       
-      // ✅ ADDED: Redirect to chat after accepting
+      // ✅ FIX: Redirect to chat using chatId from response
       if (action === 'accept') {
-        console.log("🔍 Accept successful, redirecting to chat:", `/chats/${scrimId}`);
+        console.log("🔍 Accept successful, response:", response);
         
-        // Small delay to ensure backend operations complete
-        setTimeout(() => {
-          navigate(`/chats/${scrimId}`);
-        }, 500);
+        // Get chatId from response
+        const chatId = response.chatId;
+        
+        if (chatId) {
+          console.log("🔍 Redirecting to chat:", `/chats/${chatId}`);
+          
+          // Small delay to ensure backend operations complete
+          setTimeout(() => {
+            navigate(`/chats/${chatId}`);
+          }, 500);
+        } else {
+          console.error("❌ No chatId in accept response!");
+          alert("Scrim accepted, but couldn't navigate to chat. Please check your chats manually.");
+        }
       }
     } catch (err) {
       console.error(`🚨 Failed to ${action} request ${teamId}:`, err);

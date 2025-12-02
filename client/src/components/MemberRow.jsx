@@ -25,11 +25,12 @@ const MemberRow = ({
   const [loading, setLoading] = useState(false);
   const [avatarError, setAvatarError] = useState(false);
 
+  // FIXED: Use member._id instead of member.user._id for API calls
   const handleRankChange = async (newRank) => {
     setLoading(true);
     try {
       const res = await makeAuthenticatedRequest(
-        `${API_BASE}/api/teams/${teamId}/members/${member.user._id}/rank`,
+        `${API_BASE}/api/teams/${teamId}/members/${member._id}/rank`,
         {
           method: "PUT",
           headers: {
@@ -51,11 +52,12 @@ const MemberRow = ({
     }
   };
 
+  // FIXED: Use member._id instead of member.user._id for API calls
   const handleRoleChange = async (newRole) => {
     setLoading(true);
     try {
       const res = await makeAuthenticatedRequest(
-        `${API_BASE}/api/teams/${teamId}/members/${member.user._id}/role`,
+        `${API_BASE}/api/teams/${teamId}/members/${member._id}/role`,
         {
           method: "PUT",
           headers: {
@@ -77,6 +79,7 @@ const MemberRow = ({
     }
   };
 
+  // FIXED: Use member._id instead of member.user._id for API calls
   const handleKick = async () => {
     if (
       !window.confirm(`Are you sure you want to kick ${member.user.username}?`)
@@ -87,7 +90,7 @@ const MemberRow = ({
     setLoading(true);
     try {
       const res = await makeAuthenticatedRequest(
-        `${API_BASE}/api/teams/${teamId}/members/${member.user._id}`,
+        `${API_BASE}/api/teams/${teamId}/members/${member._id}`,
         {
           method: "DELETE",
         }
@@ -193,7 +196,7 @@ const MemberRow = ({
             onRankChange={handleRankChange}
           />
           <RoleDropdown
-            memberId={member.user._id}
+            memberId={member._id}
             memberRole={member.role}
             currentUserRole={currentUserRole}
             currentUserId={user?.id || user?._id}

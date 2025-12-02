@@ -62,17 +62,35 @@ exports.getGames = async (req, res) => {
 
 exports.getMyTeams = async (req, res) => {
   try {
+    console.log("🔍 getMyTeams called for user:", req.user.userId);
+    
     const userId = req.user.userId;
-    const teams = await Team.find({ "members.user": userId })
+    
+    // ✅ FIX: Find teams where user is EITHER owner OR member
+    const teams = await Team.find({
+      $or: [
+        { owner: userId },
+        { "members.user": userId }
+      ]
+    })
+      .populate("owner", "username email avatar")
       .populate("members.user", "username email avatar")
-      .populate("game", "name");
+      .populate("game", "name formats servers ranks")
+      .sort({ createdAt: -1 });
 
-    res.status(200).json(teams);
+    console.log("🔍 Found teams:", teams.length);
+
+    // ✅ FIX: Return in standardized format
+    res.status(200).json({
+      success: true,
+      data: teams
+    });
   } catch (error) {
-    console.error("Error fetching user teams:", error);
+    console.error("❌ Error fetching user teams:", error);
     res.status(500).json({
       success: false,
       message: "Error fetching user teams",
+      error: error.message
     });
   }
 };
@@ -190,12 +208,13 @@ exports.joinTeamByCode = async (req, res) => {
   }
 };
 
+// FIXED: Now includes availableRanks in response
 exports.getTeamById = async (req, res) => {
   try {
     const teamId = req.params.id;
     const team = await Team.findById(teamId)
       .populate("members.user", "username email avatar")
-      .populate("game", "name");
+      .populate("game", "name ranks servers");
 
     if (!team) {
       return res.status(404).json({
@@ -204,7 +223,17 @@ exports.getTeamById = async (req, res) => {
       });
     }
 
-    res.status(200).json(team);
+    // Get available ranks from the game
+    const gameDoc = await Game.findById(team.game._id || team.game);
+    const availableRanks = gameDoc ? gameDoc.ranks : [];
+
+    // Return team with availableRanks
+    const teamResponse = {
+      ...team.toObject(),
+      availableRanks
+    };
+
+    res.status(200).json(teamResponse);
   } catch (error) {
     console.error("Error fetching team:", error);
     res.status(500).json({

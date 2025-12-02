@@ -711,6 +711,7 @@ exports.acceptScrim = async (req, res) => {
       success: true,
       message: "Scrim request accepted successfully",
       data: updatedScrim,
+      chatId: chat ? chat._id : null, // ✅ FIX: Return chatId for frontend navigation
     });
   } catch (error) {
     console.error("Scrim-accept Error:", error);

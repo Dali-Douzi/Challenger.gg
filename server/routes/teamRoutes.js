@@ -86,14 +86,17 @@ const optionalProtect = (req, res, next) => {
   next();
 };
 
+// FIXED: Specific routes BEFORE parameterized routes
 // Public routes
 router.get("/games", teamController.getGames);
-router.get("/:id", optionalProtect, teamController.getTeamById);
 
-// Protected routes
+// Protected routes - specific routes first
 router.get("/my", protect, teamController.getMyTeams);
 router.post("/create", protect, handleLogoUpload, teamController.createTeam);
 router.post("/join", protect, teamController.joinTeamByCode);
+
+// Parameterized routes - these should come after specific routes
+router.get("/:id", optionalProtect, teamController.getTeamById);
 router.post("/:id/join", protect, teamController.joinTeamById);
 router.put("/:id", protect, handleLogoUpload, teamController.updateTeam);
 router.put("/:id/logo", protect, handleLogoUpload, teamController.updateTeamLogo);

@@ -61,12 +61,6 @@ export const AuthProvider = ({ children }) => {
     const maxRetries = 1;
 
     try {
-      if (!hasAuthCookies() && retryCount === 0) {
-        dispatch({ type: 'LOGOUT' });
-        dispatch({ type: 'SET_LOADING', payload: false });
-        return;
-      }
-
       const data = await authService.checkAuth();
 
       if (data.success) {
@@ -79,7 +73,7 @@ export const AuthProvider = ({ children }) => {
 
       dispatch({ type: 'LOGOUT' });
     } catch (error) {
-      if (hasAuthCookies() && retryCount < maxRetries && error.status !== 401) {
+      if (retryCount < maxRetries && error.status !== 401) {
         setTimeout(() => checkAuthStatus(retryCount + 1), 1000);
         return;
       }
@@ -281,6 +275,7 @@ export const AuthProvider = ({ children }) => {
     loading: state.isLoading,
     isLoading: state.isLoading,
     isAuthenticated: state.isAuthenticated,
+    token: hasAuthCookies(), // ✅ FIX: Use hasAuthCookies() to check for accessToken/refreshToken
     login,
     signup,
     logout,

@@ -5,6 +5,8 @@ import { hasAuthCookies } from '../services/apiClient';
 const AuthContext = createContext(null);
 
 const authReducer = (state, action) => {
+  console.log('🔄 [AUTH] Reducer action:', action.type, action.payload);
+  
   switch (action.type) {
     case 'SET_LOADING':
       return { ...state, isLoading: action.payload };
@@ -54,16 +56,23 @@ export const AuthProvider = ({ children }) => {
   const [state, dispatch] = useReducer(authReducer, initialState);
 
   useEffect(() => {
+    console.log('🔄 [AUTH] AuthProvider mounted, checking auth status...');
     checkAuthStatus();
   }, []);
 
   const checkAuthStatus = async (retryCount = 0) => {
     const maxRetries = 1;
+    
+    console.log('🔍 [AUTH] checkAuthStatus called, retry:', retryCount);
+    console.log('🔍 [AUTH] Cookies:', document.cookie);
+    console.log('🔍 [AUTH] hasAuthCookies():', hasAuthCookies());
 
     try {
       const data = await authService.checkAuth();
+      console.log('✅ [AUTH] Auth check response:', data);
 
       if (data.success) {
+        console.log('✅ [AUTH] User authenticated:', data.user);
         dispatch({
           type: 'SET_AUTH_DATA',
           payload: { user: data.user },
@@ -71,34 +80,47 @@ export const AuthProvider = ({ children }) => {
         return;
       }
 
+      console.log('❌ [AUTH] Auth check failed, logging out');
       dispatch({ type: 'LOGOUT' });
     } catch (error) {
+      console.error('❌ [AUTH] Auth check error:', error);
+      
       if (retryCount < maxRetries && error.status !== 401) {
+        console.log('🔄 [AUTH] Retrying auth check in 1s...');
         setTimeout(() => checkAuthStatus(retryCount + 1), 1000);
         return;
       }
 
+      console.log('❌ [AUTH] Max retries reached or 401, logging out');
       dispatch({ type: 'LOGOUT' });
     } finally {
       if (retryCount >= maxRetries || retryCount === 0) {
+        console.log('✅ [AUTH] Setting loading to false');
         dispatch({ type: 'SET_LOADING', payload: false });
       }
     }
   };
 
   const login = async (identifier, password, rememberMe = false) => {
+    console.log('🔐 [AUTH] Login attempt for:', identifier);
+    
     try {
       const data = await authService.login(identifier, password, rememberMe);
+      console.log('✅ [AUTH] Login response:', data);
 
       if (data.success) {
+        console.log('✅ [AUTH] Login successful, updating context');
         dispatch({
           type: 'SET_AUTH_DATA',
           payload: { user: data.user },
         });
+      } else {
+        console.log('❌ [AUTH] Login failed:', data.message);
       }
 
       return data;
     } catch (error) {
+      console.error('❌ [AUTH] Login error:', error);
       return {
         success: false,
         message: error.message || 'Login failed. Please try again.',
@@ -107,10 +129,14 @@ export const AuthProvider = ({ children }) => {
   };
 
   const signup = async (formData) => {
+    console.log('📝 [AUTH] Signup attempt');
+    
     try {
       const data = await authService.signup(formData);
+      console.log('✅ [AUTH] Signup response:', data);
 
       if (data.success) {
+        console.log('✅ [AUTH] Signup successful, updating context');
         dispatch({
           type: 'SET_AUTH_DATA',
           payload: { user: data.user },
@@ -119,6 +145,7 @@ export const AuthProvider = ({ children }) => {
 
       return data;
     } catch (error) {
+      console.error('❌ [AUTH] Signup error:', error);
       return {
         success: false,
         message: error.message || 'Signup failed. Please try again.',
@@ -127,24 +154,34 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = async () => {
+    console.log('🚪 [AUTH] Logout called');
+    
     try {
       await authService.logout();
+      console.log('✅ [AUTH] Logout successful');
     } catch (error) {
-      console.error('Logout error:', error);
+      console.error('❌ [AUTH] Logout error:', error);
     } finally {
+      console.log('🔄 [AUTH] Dispatching LOGOUT action');
       dispatch({ type: 'LOGOUT' });
     }
   };
 
   const refreshToken = async () => {
+    console.log('🔄 [AUTH] Refresh token called');
+    console.log('🔍 [AUTH] hasAuthCookies():', hasAuthCookies());
+    
     try {
       if (!hasAuthCookies()) {
+        console.log('❌ [AUTH] No auth cookies, cannot refresh');
         return { success: false, reason: 'No auth cookies' };
       }
 
       const data = await authService.refreshToken();
+      console.log('✅ [AUTH] Refresh response:', data);
 
       if (data.success) {
+        console.log('✅ [AUTH] Token refreshed, updating context');
         dispatch({
           type: 'SET_AUTH_DATA',
           payload: { user: data.user },
@@ -152,15 +189,20 @@ export const AuthProvider = ({ children }) => {
         return { success: true };
       }
 
+      console.log('❌ [AUTH] Token refresh failed');
       return { success: false, reason: 'Refresh failed' };
     } catch (error) {
+      console.error('❌ [AUTH] Refresh error:', error);
       return { success: false, reason: error.message };
     }
   };
 
   const updateUsername = async (newUsername, currentPassword) => {
+    console.log('📝 [AUTH] Update username called');
+    
     try {
       const data = await authService.updateUsername(newUsername, currentPassword);
+      console.log('✅ [AUTH] Update username response:', data);
 
       if (data.success) {
         updateUser(data.user);
@@ -168,6 +210,7 @@ export const AuthProvider = ({ children }) => {
 
       return data;
     } catch (error) {
+      console.error('❌ [AUTH] Update username error:', error);
       return {
         success: false,
         message: error.message || 'Failed to update username.',
@@ -176,8 +219,11 @@ export const AuthProvider = ({ children }) => {
   };
 
   const updateEmail = async (newEmail, currentPassword) => {
+    console.log('📝 [AUTH] Update email called');
+    
     try {
       const data = await authService.updateEmail(newEmail, currentPassword);
+      console.log('✅ [AUTH] Update email response:', data);
 
       if (data.success) {
         updateUser(data.user);
@@ -185,6 +231,7 @@ export const AuthProvider = ({ children }) => {
 
       return data;
     } catch (error) {
+      console.error('❌ [AUTH] Update email error:', error);
       return {
         success: false,
         message: error.message || 'Failed to update email.',
@@ -193,10 +240,14 @@ export const AuthProvider = ({ children }) => {
   };
 
   const updatePassword = async (currentPassword, newPassword) => {
+    console.log('📝 [AUTH] Update password called');
+    
     try {
       const data = await authService.updatePassword(currentPassword, newPassword);
+      console.log('✅ [AUTH] Update password response:', data);
       return data;
     } catch (error) {
+      console.error('❌ [AUTH] Update password error:', error);
       return {
         success: false,
         message: error.message || 'Failed to update password.',
@@ -205,8 +256,11 @@ export const AuthProvider = ({ children }) => {
   };
 
   const updateAvatar = async (avatarFile, currentPassword) => {
+    console.log('📝 [AUTH] Update avatar called');
+    
     try {
       const data = await authService.updateAvatar(avatarFile, currentPassword);
+      console.log('✅ [AUTH] Update avatar response:', data);
 
       if (data.success) {
         updateUser(data.user);
@@ -214,6 +268,7 @@ export const AuthProvider = ({ children }) => {
 
       return data;
     } catch (error) {
+      console.error('❌ [AUTH] Update avatar error:', error);
       return {
         success: false,
         message: error.message || 'Failed to update avatar.',
@@ -222,8 +277,11 @@ export const AuthProvider = ({ children }) => {
   };
 
   const deleteAvatar = async () => {
+    console.log('🗑️ [AUTH] Delete avatar called');
+    
     try {
       const data = await authService.deleteAvatar();
+      console.log('✅ [AUTH] Delete avatar response:', data);
 
       if (data.success) {
         updateUser(data.user);
@@ -231,6 +289,7 @@ export const AuthProvider = ({ children }) => {
 
       return data;
     } catch (error) {
+      console.error('❌ [AUTH] Delete avatar error:', error);
       return {
         success: false,
         message: error.message || 'Failed to delete avatar.',
@@ -239,8 +298,11 @@ export const AuthProvider = ({ children }) => {
   };
 
   const deleteAccount = async (currentPassword) => {
+    console.log('🗑️ [AUTH] Delete account called');
+    
     try {
       const data = await authService.deleteAccount(currentPassword);
+      console.log('✅ [AUTH] Delete account response:', data);
 
       if (data.success) {
         dispatch({ type: 'LOGOUT' });
@@ -248,6 +310,7 @@ export const AuthProvider = ({ children }) => {
 
       return data;
     } catch (error) {
+      console.error('❌ [AUTH] Delete account error:', error);
       return {
         success: false,
         message: error.message || 'Failed to delete account.',
@@ -256,10 +319,12 @@ export const AuthProvider = ({ children }) => {
   };
 
   const updateUser = (updatedUser) => {
+    console.log('🔄 [AUTH] Update user called:', updatedUser);
     dispatch({ type: 'UPDATE_USER', payload: updatedUser });
   };
 
   const setAuthData = (userData) => {
+    console.log('🔄 [AUTH] Set auth data called:', userData);
     dispatch({
       type: 'SET_AUTH_DATA',
       payload: { user: userData },
@@ -267,15 +332,22 @@ export const AuthProvider = ({ children }) => {
   };
 
   const hasPermission = (permission) => {
-    return state.isAuthenticated && state.user;
+    const result = state.isAuthenticated && state.user;
+    console.log('🔐 [AUTH] hasPermission check:', permission, '→', result);
+    return result;
   };
+
+  // ✅ CRITICAL FIX: Compute token dynamically
+  const tokenValue = hasAuthCookies();
+  console.log('🔍 [AUTH] Token value computed:', tokenValue);
+  console.log('🔍 [AUTH] Current cookies:', document.cookie);
 
   const value = {
     user: state.user,
     loading: state.isLoading,
     isLoading: state.isLoading,
     isAuthenticated: state.isAuthenticated,
-    token: hasAuthCookies(), // ✅ FIX: Use hasAuthCookies() to check for accessToken/refreshToken
+    token: tokenValue, // ✅ Dynamically computed from cookies
     login,
     signup,
     logout,
@@ -291,6 +363,13 @@ export const AuthProvider = ({ children }) => {
     setAuthData,
     hasPermission,
   };
+
+  console.log('📊 [AUTH] Context value:', {
+    hasUser: !!value.user,
+    isLoading: value.isLoading,
+    isAuthenticated: value.isAuthenticated,
+    token: value.token,
+  });
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

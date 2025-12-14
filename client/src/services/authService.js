@@ -80,11 +80,10 @@ export const authService = {
   /**
    * Update username
    */
-  updateUsername: async (newUsername, currentPassword) => {
+  updateUsername: async (newUsername) => {
     try {
       return await api.put('/api/auth/change-username', {
         newUsername,
-        currentPassword,
       });
     } catch (error) {
       throw error;
@@ -94,11 +93,10 @@ export const authService = {
   /**
    * Update email
    */
-  updateEmail: async (newEmail, currentPassword) => {
+  updateEmail: async (newEmail) => {
     try {
       return await api.put('/api/auth/change-email', {
         newEmail,
-        currentPassword,
       });
     } catch (error) {
       throw error;
@@ -124,11 +122,10 @@ export const authService = {
    * @param {File} avatarFile - Image file
    * @param {string} currentPassword - Current password for verification
    */
-  updateAvatar: async (avatarFile, currentPassword) => {
+  updateAvatar: async (avatarFile) => {
     try {
       const formData = new FormData();
       formData.append('avatar', avatarFile);
-      formData.append('currentPassword', currentPassword);
       
       return await api.put('/api/auth/change-avatar', formData);
     } catch (error) {

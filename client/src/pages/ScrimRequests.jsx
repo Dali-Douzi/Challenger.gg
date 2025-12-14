@@ -23,17 +23,17 @@ const ScrimRequests = () => {
   const [actionLoading, setActionLoading] = useState({});
   const [error, setError] = useState(null);
 
-  console.log("🔍 ScrimRequests - scrimId:", scrimId);
+  console.log("🔍 [REQUESTS] ScrimRequests mounted - scrimId:", scrimId);
 
   useEffect(() => {
     const fetchRequests = async () => {
       try {
-        console.log("🔍 Fetching scrim details for:", scrimId);
+        console.log("🔍 [REQUESTS] Fetching scrim details for:", scrimId);
         
         // GET /api/scrims/:scrimId
         const scrim = await api.get(`/api/scrims/${scrimId}`);
 
-        console.log("🔍 Fetched scrim data:", scrim);
+        console.log("🔍 [REQUESTS] Fetched scrim data:", scrim);
 
         // Map populated scrim.requests (Team docs) into UI rows
         const mapped = (scrim.requests || []).map((team) => ({
@@ -44,11 +44,17 @@ const ScrimRequests = () => {
           status: scrim.status,
         }));
         
-        console.log("🔍 Mapped requests:", mapped);
+        console.log("🔍 [REQUESTS] Mapped requests:", mapped);
         setRequests(mapped);
       } catch (err) {
-        console.error("🚨 fetchRequests error:", err);
-        setError(err.response?.data?.message || err.message);
+        console.error("🚨 [REQUESTS] fetchRequests error:", err);
+        const errorMsg = err.response?.data?.message || err.message;
+        console.error("🚨 [REQUESTS] Error details:", {
+          message: errorMsg,
+          status: err.response?.status,
+          data: err.response?.data
+        });
+        setError(errorMsg);
       } finally {
         setLoading(false);
       }
@@ -60,39 +66,85 @@ const ScrimRequests = () => {
   }, [scrimId]);
 
   const handleAction = async (teamId, action) => {
-    console.log(`🔍 Handling ${action} for team:`, teamId);
+    console.log(`🔍 [REQUESTS] Handling ${action} for team:`, teamId);
     
     setActionLoading((prev) => ({ ...prev, [teamId]: true }));
     try {
       // PUT /api/scrims/accept/:scrimId or /api/scrims/decline/:scrimId
       const response = await api.put(`/api/scrims/${action}/${scrimId}`, { teamId });
       
-      console.log(`🔍 ${action} response:`, response);
+      console.log(`✅ [REQUESTS] ${action} response:`, response);
       
+      // Remove the request from the list
       setRequests((prev) => prev.filter((r) => r.id !== teamId));
       
-      // ✅ FIX: Redirect to chat using chatId from response
+      // ✅ FIX: Better handling of chat navigation for accept action
       if (action === 'accept') {
-        console.log("🔍 Accept successful, response:", response);
+        console.log("🔍 [REQUESTS] Accept successful, processing navigation...");
         
-        // Get chatId from response
-        const chatId = response.chatId;
+        // Get chatId from response (check multiple possible locations)
+        const chatId = response.chatId || response.data?.chatId;
         
         if (chatId) {
-          console.log("🔍 Redirecting to chat:", `/chats/${chatId}`);
+          console.log("✅ [REQUESTS] Found chatId:", chatId);
+          console.log("✅ [REQUESTS] Navigating to chat:", `/chats/${chatId}`);
           
-          // Small delay to ensure backend operations complete
+          // Wait longer to ensure backend operations complete
           setTimeout(() => {
-            navigate(`/chats/${chatId}`);
-          }, 500);
+            navigate(`/chats/${chatId}`, { replace: true });
+          }, 1000);
         } else {
-          console.error("❌ No chatId in accept response!");
-          alert("Scrim accepted, but couldn't navigate to chat. Please check your chats manually.");
+          console.warn("⚠️ [REQUESTS] No chatId in response, trying fallback...");
+          
+          // Fallback: Try to fetch the chat manually
+          setTimeout(async () => {
+            try {
+              console.log("🔍 [REQUESTS] Attempting to fetch chats...");
+              const chatsResponse = await api.get('/api/chats');
+              console.log("🔍 [REQUESTS] Chats response:", chatsResponse);
+              
+              // Handle different response formats
+              let chatsArray = [];
+              if (chatsResponse && chatsResponse.success && Array.isArray(chatsResponse.data)) {
+                chatsArray = chatsResponse.data;
+              } else if (Array.isArray(chatsResponse)) {
+                chatsArray = chatsResponse;
+              } else if (chatsResponse && Array.isArray(chatsResponse.data)) {
+                chatsArray = chatsResponse.data;
+              }
+              
+              // Find the chat for this scrim
+              const scrimChat = chatsArray.find(
+                chat => chat.type === 'scrim' && chat.metadata?.scrimId === scrimId
+              );
+              
+              if (scrimChat) {
+                console.log("✅ [REQUESTS] Found chat via fallback:", scrimChat._id);
+                navigate(`/chats/${scrimChat._id}`, { replace: true });
+              } else {
+                console.warn("⚠️ [REQUESTS] Chat not found in fallback");
+                alert("Scrim accepted successfully! The chat should appear shortly. Please check your chats page.");
+                navigate('/chats');
+              }
+            } catch (fallbackErr) {
+              console.error("❌ [REQUESTS] Fallback chat fetch failed:", fallbackErr);
+              alert("Scrim accepted successfully! Please check your chats page.");
+              navigate('/chats');
+            }
+          }, 1500);
         }
+      } else {
+        // For decline action, show success message
+        console.log("✅ [REQUESTS] Decline successful");
       }
     } catch (err) {
-      console.error(`🚨 Failed to ${action} request ${teamId}:`, err);
+      console.error(`🚨 [REQUESTS] Failed to ${action} request:`, err);
       const errorMessage = err.response?.data?.message || err.message;
+      console.error("🚨 [REQUESTS] Error details:", {
+        message: errorMessage,
+        status: err.response?.status,
+        data: err.response?.data
+      });
       alert(`Error: ${errorMessage}`);
     } finally {
       setActionLoading((prev) => ({ ...prev, [teamId]: false }));

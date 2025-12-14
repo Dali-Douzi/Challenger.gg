@@ -36,13 +36,26 @@ const TeamDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [teamColors, setTeamColors] = useState({});
 
   const fetchTeams = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const teamsData = await teamService.getMyTeams();
-      const teamsArray = Array.isArray(teamsData) ? teamsData : [];
+      const response = await teamService.getMyTeams();
+      console.log("Teams response:", response);
+      
+      let teamsArray = [];
+      
+      if (Array.isArray(response)) {
+        teamsArray = response;
+      } else if (response.data && Array.isArray(response.data)) {
+        teamsArray = response.data;
+      } else if (response.success && Array.isArray(response.data)) {
+        teamsArray = response.data;
+      }
+      
+      console.log("Parsed teams array:", teamsArray);
       setTeams(teamsArray);
     } catch (err) {
       console.error("Error fetching teams:", err);
@@ -63,6 +76,72 @@ const TeamDashboard = () => {
     }
     fetchTeams();
   }, [fetchTeams, isAuthenticated, authLoading]);
+
+  const extractTeamColors = useCallback((teamId, logoSrc) => {
+    if (!logoSrc) return;
+
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        canvas.width = img.width;
+        canvas.height = img.height;
+
+        ctx.drawImage(img, 0, 0);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+
+        const colorMap = {};
+        const tolerance = 40;
+
+        for (let i = 0; i < imageData.length; i += 16) {
+          const r = imageData[i];
+          const g = imageData[i + 1];
+          const b = imageData[i + 2];
+          const alpha = imageData[i + 3];
+
+          if (alpha < 128) continue;
+
+          const brightness = (r + g + b) / 3;
+          if (brightness < 30 || brightness > 225) continue;
+
+          const key = `${Math.floor(r / tolerance) * tolerance},${
+            Math.floor(g / tolerance) * tolerance
+          },${Math.floor(b / tolerance) * tolerance}`;
+          colorMap[key] = (colorMap[key] || 0) + 1;
+        }
+
+        const sortedColors = Object.entries(colorMap)
+          .sort(([, a], [, b]) => b - a)
+          .slice(0, 2);
+
+        if (sortedColors.length >= 1) {
+          const color1 = sortedColors[0][0];
+          const color2 = sortedColors.length > 1 ? sortedColors[1][0] : color1;
+
+          setTeamColors(prev => ({
+            ...prev,
+            [teamId]: {
+              primary: `rgba(${color1}, 0.12)`,
+              secondary: `rgba(${color2}, 0.08)`,
+            }
+          }));
+        }
+      } catch (error) {
+        console.log(`Color extraction failed for team ${teamId}`);
+      }
+    };
+    img.src = logoSrc;
+  }, []);
+
+  useEffect(() => {
+    teams.forEach((team) => {
+      if (team.logo && !teamColors[team._id]) {
+        extractTeamColors(team._id, team.logo);
+      }
+    });
+  }, [teams, extractTeamColors]);
 
   const handleCreateTeam = () => {
     navigate("/create-team");
@@ -244,115 +323,136 @@ const TeamDashboard = () => {
       {/* Teams List */}
       {!error && teams.length > 0 && (
         <Grid container spacing={3}>
-          {teams.map((team) => (
-            <Grid item xs={12} sm={6} md={4} key={team._id}>
-              <Paper
-                elevation={4}
-                sx={{
-                  borderRadius: 3,
-                  overflow: "hidden",
-                  transition: "all 0.3s ease",
-                  border: "1px solid",
-                  borderColor: "rgba(0, 255, 255, 0.2)",
-                  "&:hover": {
-                    transform: "translateY(-8px)",
-                    boxShadow: "0 12px 32px rgba(0, 255, 255, 0.3)",
-                    borderColor: "primary.main",
-                  },
-                }}
-              >
-                <Box
-                  onClick={() => navigate(`/teams/${team._id}`)}
-                  sx={{ cursor: "pointer" }}
+          {teams.map((team) => {
+            const colors = teamColors[team._id] || {
+              primary: "rgba(0, 255, 255, 0.08)",
+              secondary: "rgba(255, 0, 255, 0.05)",
+            };
+
+            return (
+              <Grid item xs={12} sm={6} md={4} lg={3} key={team._id}>
+                <Paper
+                  elevation={4}
+                  sx={{
+                    borderRadius: 3,
+                    overflow: "hidden",
+                    transition: "all 0.3s ease",
+                    border: "1px solid",
+                    borderColor: "rgba(0, 255, 255, 0.2)",
+                    height: "100%",
+                    minHeight: 260,
+                    maxHeight: 260,
+                    minWidth: 260,
+                    maxWidth: 280,
+                    mx: "auto",
+                    display: "flex",
+                    flexDirection: "column",
+                    position: "relative",
+                    background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`,
+                    "&::before": {
+                      content: '""',
+                      position: "absolute",
+                      inset: 0,
+                      background: `radial-gradient(circle at 50% 30%, ${colors.primary.replace('0.12', '0.15')} 0%, transparent 60%)`,
+                      pointerEvents: "none",
+                      opacity: 0,
+                      transition: "opacity 0.3s ease",
+                    },
+                    "&:hover": {
+                      transform: "translateY(-8px)",
+                      boxShadow: "0 12px 32px rgba(0, 255, 255, 0.3)",
+                      borderColor: "primary.main",
+                      "&::before": {
+                        opacity: 1,
+                      },
+                    },
+                  }}
                 >
                   <Box
-                    sx={{
-                      p: 3,
+                    onClick={() => navigate(`/teams/${team._id}`)}
+                    sx={{ 
+                      cursor: "pointer",
+                      flex: 1,
                       display: "flex",
                       flexDirection: "column",
-                      alignItems: "center",
-                      textAlign: "center",
                     }}
                   >
-                    <Avatar
-                      src={team.logo || ""}
-                      alt={team.name}
+                    <Box
                       sx={{
-                        width: 80,
-                        height: 80,
-                        mb: 2,
-                        bgcolor: team.logo ? "transparent" : "primary.main",
-                        fontSize: "2rem",
-                        fontWeight: "bold",
-                        border: "3px solid",
-                        borderColor: "primary.main",
-                        boxShadow: "0 4px 16px rgba(0, 255, 255, 0.3)",
+                        p: 3,
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        textAlign: "center",
+                        flex: 1,
                       }}
                     >
-                      {!team.logo && getTeamInitials(team.name)}
-                    </Avatar>
-
-                    <Typography variant="h6" fontWeight="bold" gutterBottom>
-                      {team.name}
-                    </Typography>
-
-                    <Typography
-                      variant="body2"
-                      color="text.secondary"
-                      sx={{ mb: 2 }}
-                    >
-                      {getGameName(team.game)}
-                    </Typography>
-
-                    <Stack direction="row" spacing={1} flexWrap="wrap" justifyContent="center">
-                      <Chip
-                        label={getUserRole(team)}
-                        color={getRoleColor(getUserRole(team))}
-                        size="small"
+                      <Avatar
+                        src={team.logo || ""}
+                        alt={team.name}
                         sx={{
-                          textTransform: "capitalize",
-                          fontWeight: 600,
+                          width: 90,
+                          height: 90,
+                          mb: 2,
+                          bgcolor: team.logo ? "transparent" : "primary.main",
+                          fontSize: "2.2rem",
+                          fontWeight: "bold",
+                          border: "3px solid",
+                          borderColor: "primary.main",
+                          boxShadow: `
+                            0 4px 16px rgba(0, 0, 0, 0.1),
+                            0 0 20px ${colors.primary.replace('0.12', '0.3')}
+                          `,
                         }}
-                      />
-                      {team.rank && (
-                        <Chip
-                          label={team.rank}
-                          variant="outlined"
-                          size="small"
-                          sx={{ fontWeight: 600 }}
-                        />
-                      )}
-                      {team.server && (
-                        <Chip
-                          label={team.server}
-                          variant="outlined"
-                          size="small"
-                          sx={{ fontWeight: 600 }}
-                        />
-                      )}
-                    </Stack>
+                      >
+                        {!team.logo && getTeamInitials(team.name)}
+                      </Avatar>
 
-                    {team.description && (
+                      <Typography variant="h6" fontWeight="bold" gutterBottom>
+                        {team.name}
+                      </Typography>
+
                       <Typography
                         variant="body2"
                         color="text.secondary"
-                        sx={{
-                          mt: 2,
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          display: "-webkit-box",
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: "vertical",
-                        }}
+                        sx={{ mb: 2 }}
                       >
-                        {team.description}
+                        {getGameName(team.game)}
                       </Typography>
-                    )}
+
+                      <Stack direction="row" spacing={1} flexWrap="wrap" justifyContent="center">
+                        <Chip
+                          label={getUserRole(team)}
+                          color={getRoleColor(getUserRole(team))}
+                          size="small"
+                          sx={{
+                            textTransform: "capitalize",
+                            fontWeight: 600,
+                          }}
+                        />
+                        {team.rank && (
+                          <Chip
+                            label={team.rank}
+                            variant="outlined"
+                            size="small"
+                            sx={{ fontWeight: 600 }}
+                          />
+                        )}
+                        {team.server && (
+                          <Chip
+                            label={team.server}
+                            variant="outlined"
+                            size="small"
+                            sx={{ fontWeight: 600 }}
+                          />
+                        )}
+                      </Stack>
+                    </Box>
                   </Box>
-                </Box>
-              </Paper>
-            </Grid>
-          ))}
+                </Paper>
+              </Grid>
+            );
+          })}
         </Grid>
       )}
 

@@ -146,7 +146,7 @@ const deleteOldAvatar = async (avatarUrl) => {
 
 const runPostDeletionCleanup = async (verbose = false) => {
   try {
-    if (verbose) console.log("🧹 Running post-deletion cleanup...");
+    if (verbose) console.log("ðŸ§¹ Running post-deletion cleanup...");
 
     const Team = require("../models/Team");
     const Scrim = require("../models/Scrim");
@@ -177,7 +177,7 @@ const runPostDeletionCleanup = async (verbose = false) => {
 
         await Team.findByIdAndDelete(team._id);
         cleanedTeams++;
-        if (verbose) console.log(`🧹 Cleaned orphaned team: ${team.name}`);
+        if (verbose) console.log(`ðŸ§¹ Cleaned orphaned team: ${team.name}`);
       }
     }
 
@@ -190,7 +190,7 @@ const runPostDeletionCleanup = async (verbose = false) => {
         await Notification.deleteMany({ scrim: scrim._id });
         await Scrim.findByIdAndDelete(scrim._id);
         cleanedScrims++;
-        if (verbose) console.log(`🧹 Cleaned orphaned scrim: ${scrim._id}`);
+        if (verbose) console.log(`ðŸ§¹ Cleaned orphaned scrim: ${scrim._id}`);
       }
     }
 
@@ -200,7 +200,7 @@ const runPostDeletionCleanup = async (verbose = false) => {
 
     if (verbose) {
       console.log(
-        `✅ Post-deletion cleanup completed: ${cleanedTeams} teams, ${cleanedScrims} scrims, ${orphanedNotifications.deletedCount} orphaned notifications`
+        `âœ… Post-deletion cleanup completed: ${cleanedTeams} teams, ${cleanedScrims} scrims, ${orphanedNotifications.deletedCount} orphaned notifications`
       );
     }
 
@@ -210,7 +210,7 @@ const runPostDeletionCleanup = async (verbose = false) => {
       cleanedOrphanedNotifications: orphanedNotifications.deletedCount,
     };
   } catch (error) {
-    console.error("⚠️ Post-deletion cleanup failed:", error);
+    console.error("âš ï¸ Post-deletion cleanup failed:", error);
     return {
       cleanedTeams: 0,
       cleanedScrims: 0,
@@ -758,7 +758,7 @@ exports.deleteAccount = async (req, res) => {
       });
     }
 
-    console.log(`🗑️ User deletion initiated: ${user.username} (${user.email})`);
+    console.log(`ðŸ—‘ï¸ User deletion initiated: ${user.username} (${user.email})`);
 
     if (user.avatar) {
       await deleteOldAvatar(user.avatar);
@@ -775,13 +775,13 @@ exports.deleteAccount = async (req, res) => {
 
     clearAuthCookies(res);
 
-    console.log(`✅ User account deleted: ${user.username}`);
+    console.log(`âœ… User account deleted: ${user.username}`);
 
     try {
       const cleanupResults = await runPostDeletionCleanup(true);
-      console.log("✅ Post-deletion cleanup completed:", cleanupResults);
+      console.log("âœ… Post-deletion cleanup completed:", cleanupResults);
     } catch (cleanupError) {
-      console.error("⚠️ Post-deletion cleanup failed:", cleanupError);
+      console.error("âš ï¸ Post-deletion cleanup failed:", cleanupError);
     }
 
     res.json({

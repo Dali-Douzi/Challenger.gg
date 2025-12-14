@@ -43,7 +43,7 @@ const getTeamInitials = (teamName) => {
 
 const ScrimDashboard = () => {
   const navigate = useNavigate();
-  const { user, isAuthenticated } = useAuth(); // ✅ Get user to check permissions
+  const { user, isAuthenticated } = useAuth();
   const theme = useTheme();
 
   const [teams, setTeams] = useState([]);
@@ -100,30 +100,50 @@ const ScrimDashboard = () => {
     });
   };
 
-  // ✅ Helper to check if user can manage a team
+  // ✅ FIXED: Helper to check if user can manage a team
   const canManageTeam = (team) => {
-    if (!user || !team) return false;
+    if (!user || !team) {
+      console.log("🔍 [PERMISSION] No user or team");
+      return false;
+    }
     
-    // Check if user is owner
-    const isOwner = team.owner === user._id || team.owner?._id === user._id;
+    // ✅ FIX: Get consistent user ID (check all possible properties)
+    const userId = user.id || user._id || user.userId;
+    if (!userId) {
+      console.warn("⚠️ [PERMISSION] User object missing ID property:", user);
+      return false;
+    }
+    
+    // Check if user is owner (team.owner can be string or object)
+    const ownerId = team.owner?._id || team.owner;
+    const isOwner = ownerId?.toString() === userId.toString();
     
     // Check if user is a manager
-    const isManager = team.members?.some(
-      (m) => (m.user === user._id || m.user?._id === user._id) && m.role === "manager"
-    );
+    const isManager = team.members?.some((m) => {
+      const memberId = m.user?._id || m.user;
+      return memberId?.toString() === userId.toString() && m.role === "manager";
+    });
     
+    console.log(`🔍 [PERMISSION] Team "${team.name}" - UserId: ${userId}, OwnerId: ${ownerId}, Owner: ${isOwner}, Manager: ${isManager}`);
     return isOwner || isManager;
   };
 
-  // 1) Fetch user's teams - ✅ FILTER to only manageable teams
+  // ✅ FIXED: Fetch user's teams with improved debugging
   useEffect(() => {
     (async () => {
       try {
+        console.log("🔍 [TEAMS] User object:", {
+          id: user?.id,
+          _id: user?._id,
+          userId: user?.userId,
+          keys: user ? Object.keys(user) : [],
+          fullUser: user
+        });
+        
         console.log("🔍 [TEAMS] Fetching teams...");
-        console.log("🔍 [TEAMS] User:", user);
         
         const data = await api.get('/api/teams/my');
-        console.log("🔍 [TEAMS] Response data:", data);
+        console.log("🔍 [TEAMS] Raw API response:", data);
         
         let teamsArray = [];
         if (data && data.success && Array.isArray(data.data)) {
@@ -139,6 +159,16 @@ const ScrimDashboard = () => {
         }
         
         console.log("🔍 [TEAMS] Teams array before filter:", teamsArray.length);
+        console.log("🔍 [TEAMS] Teams data:", teamsArray.map(t => ({
+          id: t._id,
+          name: t.name,
+          owner: t.owner,
+          ownerId: t.owner?._id || t.owner,
+          members: t.members?.map(m => ({
+            userId: m.user?._id || m.user,
+            role: m.role
+          }))
+        })));
         
         // ✅ FIX: Filter to only teams the user can manage
         const manageableTeams = teamsArray.filter(team => {
@@ -149,6 +179,7 @@ const ScrimDashboard = () => {
         
         console.log("🔍 [TEAMS] Total teams:", teamsArray.length);
         console.log("🔍 [TEAMS] Manageable teams:", manageableTeams.length);
+        console.log("🔍 [TEAMS] Manageable team names:", manageableTeams.map(t => t.name));
         
         setTeams(manageableTeams);
         
@@ -158,33 +189,42 @@ const ScrimDashboard = () => {
           console.log("✅ [TEAMS] Teams loaded! Count:", manageableTeams.length);
         } else {
           console.warn("⚠️ [TEAMS] No manageable teams found");
+          // Check if there were any teams at all
+          if (teamsArray.length > 0) {
+            console.warn("⚠️ [TEAMS] User has teams but can't manage any of them");
+            console.warn("⚠️ [TEAMS] This indicates a permission issue");
+          }
         }
       } catch (err) {
         console.error("❌ [TEAMS] Fetch error:", err);
-        console.error("❌ [TEAMS] Error message:", err.message);
-        console.error("❌ [TEAMS] Error response:", err.response);
+        console.error("❌ [TEAMS] Error details:", {
+          message: err.message,
+          response: err.response?.data,
+          status: err.response?.status
+        });
         setTeams([]);
       } finally {
         setLoading((l) => ({ ...l, teams: false }));
       }
     })();
-  }, [user]); // ✅ Depend on user
+  }, [user]);
 
-  // 2) Fetch all games
+  // Fetch all games
   useEffect(() => {
     (async () => {
       try {
         const res = await fetch(`${API_BASE}/api/teams/games`);
         if (res.ok) {
           const data = await res.json();
-          console.log("GAMES →", data);
+          console.log("🎮 [GAMES] Fetched:", data);
           const gamesArray = Array.isArray(data) ? data : [];
           setGames(gamesArray);
         } else {
+          console.error("❌ [GAMES] Failed to fetch");
           setGames([]);
         }
       } catch (err) {
-        console.error("Error fetching games:", err);
+        console.error("❌ [GAMES] Error:", err);
         setGames([]);
       } finally {
         setLoading((l) => ({ ...l, games: false }));
@@ -199,15 +239,18 @@ const ScrimDashboard = () => {
       setSelectedGameFilter(first.name);
       setRankOptions(first.ranks || []);
       setServerOptions(first.servers || []);
+      console.log("🎮 [GAMES] Initialized filters with:", first.name);
     }
   }, [loading.games, games]);
 
-  // 3) Auto-populate when team changes
+  // Auto-populate when team changes
   useEffect(() => {
     if (!selectedTeam || !teams.length || !games.length) return;
 
     const team = teams.find((t) => t._id === selectedTeam);
     if (!team) return;
+
+    console.log("🔍 [TEAM-CHANGE] Selected team:", team.name);
 
     // Find the game object
     let gameObj = null;
@@ -217,7 +260,12 @@ const ScrimDashboard = () => {
       gameObj = games.find((g) => g._id === team.game || g.name === team.game);
     }
 
-    if (!gameObj) return;
+    if (!gameObj) {
+      console.warn("⚠️ [TEAM-CHANGE] Game not found for team");
+      return;
+    }
+
+    console.log("🔍 [TEAM-CHANGE] Game:", gameObj.name);
 
     // Set filters from team
     setSelectedGameFilter(gameObj.name);
@@ -236,7 +284,7 @@ const ScrimDashboard = () => {
 
   // Fetch scrims
   const fetchScrims = async () => {
-    console.log("📡 fetchScrims called");
+    console.log("📡 [SCRIMS] fetchScrims called");
     setLoading((l) => ({ ...l, scrims: true }));
     setError(null);
     
@@ -247,29 +295,32 @@ const ScrimDashboard = () => {
       if (selectedRankFilter) params.append("rank", selectedRankFilter);
 
       const url = `/api/scrims?${params.toString()}`;
-      console.log("📡 Fetching scrims from:", url);
+      console.log("📡 [SCRIMS] Fetching from:", url);
 
       const responseData = await api.get(url);
-      console.log("📥 Scrims response:", responseData);
+      console.log("📥 [SCRIMS] Response:", responseData);
 
       // Handle different response formats
       if (responseData && responseData.success && Array.isArray(responseData.data)) {
-        console.log("✅ Scrims loaded:", responseData.data.length);
+        console.log("✅ [SCRIMS] Loaded (success format):", responseData.data.length);
         setScrims(responseData.data);
       } else if (Array.isArray(responseData)) {
-        console.log("✅ Scrims loaded (array):", responseData.length);
+        console.log("✅ [SCRIMS] Loaded (array format):", responseData.length);
         setScrims(responseData);
       } else if (responseData && Array.isArray(responseData.data)) {
-        console.log("✅ Scrims loaded (data):", responseData.data.length);
+        console.log("✅ [SCRIMS] Loaded (data format):", responseData.data.length);
         setScrims(responseData.data);
       } else {
-        console.warn("⚠️ Unexpected scrims format:", responseData);
+        console.warn("⚠️ [SCRIMS] Unexpected format:", responseData);
         setScrims([]);
       }
     } catch (err) {
-      console.error("❌ Error fetching scrims:", err);
-      console.error("❌ Error message:", err.message);
-      console.error("❌ Error response:", err.response);
+      console.error("❌ [SCRIMS] Error:", err);
+      console.error("❌ [SCRIMS] Details:", {
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status
+      });
       
       // Don't set error state if it's just an empty result
       if (err.message && !err.message.includes("404")) {
@@ -277,31 +328,26 @@ const ScrimDashboard = () => {
       }
       setScrims([]);
     } finally {
-      console.log("✅ Setting scrims loading to false");
+      console.log("✅ [SCRIMS] Setting loading to false");
       setLoading((l) => ({ ...l, scrims: false }));
     }
   };
 
-  // ✅ FIX: Fetch scrims when authenticated and data ready (removed token check)
+  // Fetch scrims when authenticated and data ready
   useEffect(() => {
-    console.log(
-      "Fetch scrims effect - isAuthenticated:",
+    console.log("📡 [SCRIMS] Effect triggered:", {
       isAuthenticated,
-      "games loaded:",
-      !loading.games,
-      "teams loaded:",
-      !loading.teams,
-      "gameFilter:",
-      selectedGameFilter
-    );
+      gamesLoaded: !loading.games,
+      teamsLoaded: !loading.teams,
+      gameFilter: selectedGameFilter
+    });
     
-    // ✅ Changed: Use isAuthenticated instead of token
     if (isAuthenticated && !loading.games && !loading.teams && selectedGameFilter) {
-      console.log("Calling fetchScrims");
+      console.log("📡 [SCRIMS] Calling fetchScrims");
       fetchScrims();
     }
   }, [
-    isAuthenticated, // ✅ Changed from token
+    isAuthenticated,
     selectedGameFilter,
     selectedServerFilter,
     selectedRankFilter,
@@ -309,6 +355,7 @@ const ScrimDashboard = () => {
     loading.teams,
   ]);
 
+  // Track requested scrims
   useEffect(() => {
     if (!selectedTeam) return;
     const persisted = scrims
@@ -344,6 +391,8 @@ const ScrimDashboard = () => {
   const handlePostScrim = async (e) => {
     e.preventDefault();
     
+    console.log("📤 [POST] Validating scrim post...");
+    
     // ✅ FIX: Validate all required fields
     if (!selectedTeam) {
       alert("Please select a team.");
@@ -376,7 +425,7 @@ const ScrimDashboard = () => {
 
     setLoading((l) => ({ ...l, posting: true }));
     try {
-      console.log("📤 Posting scrim:", {
+      console.log("📤 [POST] Posting scrim:", {
         teamId: selectedTeam,
         format,
         scheduledTime: dt.toISOString(),
@@ -388,7 +437,7 @@ const ScrimDashboard = () => {
         scheduledTime: dt.toISOString(),
       });
 
-      console.log("📥 Post scrim response:", responseData);
+      console.log("📥 [POST] Response:", responseData);
 
       if (responseData.success) {
         setSelectedDay("");
@@ -399,7 +448,7 @@ const ScrimDashboard = () => {
         throw new Error(responseData.message || "Failed to post scrim");
       }
     } catch (err) {
-      console.error("❌ Error posting scrim:", err);
+      console.error("❌ [POST] Error:", err);
       alert(err.message || "Failed to post scrim");
     } finally {
       setLoading((l) => ({ ...l, posting: false }));
@@ -409,17 +458,21 @@ const ScrimDashboard = () => {
   const handleSendRequest = async (scrimId) => {
     if (!selectedRequestTeam || requested.includes(scrimId)) return;
 
+    console.log("📤 [REQUEST] Sending request for scrim:", scrimId);
     setRequested((prev) => [...prev, scrimId]);
+    
     try {
       const responseData = await api.post(`/api/scrims/request/${scrimId}`, {
         teamId: selectedRequestTeam
       });
 
+      console.log("📥 [REQUEST] Response:", responseData);
+
       if (!responseData.success) {
         throw new Error(responseData.message || "Failed to send request");
       }
     } catch (err) {
-      console.error("Error sending request:", err);
+      console.error("❌ [REQUEST] Error:", err);
       if (err.message === "Scrim request already sent") return;
       alert(err.message);
       setRequested((prev) => prev.filter((id) => id !== scrimId));
@@ -427,13 +480,14 @@ const ScrimDashboard = () => {
   };
 
   const handleEditScrim = (scrimId) => {
+    console.log("✏️ [EDIT] Editing scrim:", scrimId);
     sessionStorage.setItem("editingScrimId", scrimId);
     navigate("/scrims/edit");
   };
 
-  // Game filter change - ✅ FIXED to update formats
+  // Game filter change
   const handleGameChange = (gameName) => {
-    console.log("Game changed to:", gameName);
+    console.log("🎮 [FILTER] Game changed to:", gameName);
     setSelectedGameFilter(gameName);
     const game = games.find((g) => g.name === gameName) || {};
     setServerOptions(game.servers || []);
@@ -576,7 +630,7 @@ const ScrimDashboard = () => {
                     PaperProps: {
                       sx: {
                         maxHeight: 400,
-                        width: 400, // ✅ FIX: Fixed width
+                        width: 400,
                       },
                     },
                   }}
@@ -599,7 +653,7 @@ const ScrimDashboard = () => {
                     PaperProps: {
                       sx: {
                         maxHeight: 400,
-                        width: 400, // ✅ FIX: Fixed width
+                        width: 400,
                       },
                     },
                   }}
@@ -622,7 +676,7 @@ const ScrimDashboard = () => {
                     PaperProps: {
                       sx: {
                         maxHeight: 400,
-                        width: 400, // ✅ FIX: Fixed width
+                        width: 400,
                       },
                     },
                   }}
@@ -645,7 +699,7 @@ const ScrimDashboard = () => {
                     PaperProps: {
                       sx: {
                         maxHeight: 400,
-                        width: 400, // ✅ FIX: Fixed width
+                        width: 400,
                       },
                     },
                   }}
@@ -725,7 +779,7 @@ const ScrimDashboard = () => {
                       PaperProps: {
                         sx: {
                           maxHeight: 400,
-                          width: 300, // ✅ FIX: Fixed width
+                          width: 300,
                         },
                       },
                     }}
@@ -750,7 +804,7 @@ const ScrimDashboard = () => {
                       PaperProps: {
                         sx: {
                           maxHeight: 400,
-                          width: 250, // ✅ FIX: Fixed width
+                          width: 250,
                         },
                       },
                     }}
@@ -776,7 +830,7 @@ const ScrimDashboard = () => {
                       PaperProps: {
                         sx: {
                           maxHeight: 400,
-                          width: 250, // ✅ FIX: Fixed width
+                          width: 250,
                         },
                       },
                     }}
@@ -802,7 +856,7 @@ const ScrimDashboard = () => {
                       PaperProps: {
                         sx: {
                           maxHeight: 400,
-                          width: 400, // ✅ FIX: Fixed width
+                          width: 400,
                         },
                       },
                     }}

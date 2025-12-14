@@ -24,14 +24,27 @@ const authMiddleware = (req, res, next) => {
     try {
       // Try to verify the access token
       const decoded = jwt.verify(accessToken, process.env.JWT_SECRET);
-      // Keep original decoding but ensure consistent property
-      req.user = decoded;
-      req.user.id = decoded.userId || decoded.id; // Ensure id property exists
+      
+      // ✅ FIX: Set consistent user ID properties for frontend/backend compatibility
+      req.user = {
+        userId: decoded.userId || decoded.id, // Primary property (backend uses this)
+        id: decoded.userId || decoded.id,     // Alias for consistency (frontend may use this)
+        ...decoded                            // Include all other decoded properties
+      };
+      
+      console.log("🔍 [AUTH] User authenticated:", {
+        userId: req.user.userId,
+        id: req.user.id,
+        keys: Object.keys(req.user)
+      });
+      
       return next();
     } catch (tokenError) {
       // If access token is expired, check if we can refresh
       if (tokenError.name === "TokenExpiredError" && refreshToken) {
         try {
+          console.log("🔄 [AUTH] Access token expired, attempting refresh...");
+          
           // Verify refresh token
           const refreshDecoded = jwt.verify(
             refreshToken,
@@ -59,11 +72,21 @@ const authMiddleware = (req, res, next) => {
 
           res.cookie("accessToken", newAccessToken, cookieConfig);
 
-          // Set user in request and continue - keep original structure
-          req.user = refreshDecoded;
-          req.user.id = refreshDecoded.userId || refreshDecoded.id; // Ensure id property exists
+          // ✅ FIX: Set consistent user ID properties
+          req.user = {
+            userId: refreshDecoded.userId || refreshDecoded.id,
+            id: refreshDecoded.userId || refreshDecoded.id,
+            ...refreshDecoded
+          };
+          
+          console.log("✅ [AUTH] Token refreshed successfully:", {
+            userId: req.user.userId,
+            id: req.user.id
+          });
+          
           return next();
         } catch (refreshError) {
+          console.error("❌ [AUTH] Token refresh failed:", refreshError.message);
           return res.status(401).json({
             success: false,
             message: "Token refresh failed",
@@ -73,6 +96,7 @@ const authMiddleware = (req, res, next) => {
       }
 
       // Token expired and no valid refresh token
+      console.error("❌ [AUTH] Token expired:", tokenError.message);
       return res.status(401).json({
         success: false,
         message: "Token expired",
@@ -80,7 +104,7 @@ const authMiddleware = (req, res, next) => {
       });
     }
   } catch (error) {
-    console.error("Auth middleware error:", error);
+    console.error("❌ [AUTH] Auth middleware error:", error);
     return res.status(500).json({
       success: false,
       message: "Authentication error",

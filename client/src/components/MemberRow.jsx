@@ -10,9 +10,7 @@ import {
 import { useAuth } from "../context/AuthContext";
 import RoleDropdown from "./RoleDropdown";
 import RankDropdown from "./RankDropdown";
-import { getApiBaseUrl } from '../services/apiClient';
-
-const API_BASE = getApiBaseUrl();
+import api from '../services/apiClient';
 
 const MemberRow = ({
   member,
@@ -21,65 +19,42 @@ const MemberRow = ({
   teamId,
   onMemberChange,
 }) => {
-  const { user, makeAuthenticatedRequest } = useAuth();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [avatarError, setAvatarError] = useState(false);
 
-  // FIXED: Use member._id instead of member.user._id for API calls
   const handleRankChange = async (newRank) => {
     setLoading(true);
     try {
-      const res = await makeAuthenticatedRequest(
-        `${API_BASE}/api/teams/${teamId}/members/${member._id}/rank`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ rank: newRank }),
-        }
+      await api.put(
+        `/api/teams/${teamId}/members/${member._id}/rank`,
+        { rank: newRank }
       );
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || "Failed to change rank");
-      }
       onMemberChange();
     } catch (err) {
       console.error(err);
-      alert(err.message);
+      alert(err.message || "Failed to change rank");
     } finally {
       setLoading(false);
     }
   };
 
-  // FIXED: Use member._id instead of member.user._id for API calls
   const handleRoleChange = async (newRole) => {
     setLoading(true);
     try {
-      const res = await makeAuthenticatedRequest(
-        `${API_BASE}/api/teams/${teamId}/members/${member._id}/role`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ role: newRole }),
-        }
+      await api.put(
+        `/api/teams/${teamId}/members/${member._id}/role`,
+        { role: newRole }
       );
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || "Failed to change role");
-      }
       onMemberChange();
     } catch (err) {
       console.error(err);
-      alert(err.message);
+      alert(err.message || "Failed to change role");
     } finally {
       setLoading(false);
     }
   };
 
-  // FIXED: Use member._id instead of member.user._id for API calls
   const handleKick = async () => {
     if (
       !window.confirm(`Are you sure you want to kick ${member.user.username}?`)
@@ -89,20 +64,11 @@ const MemberRow = ({
 
     setLoading(true);
     try {
-      const res = await makeAuthenticatedRequest(
-        `${API_BASE}/api/teams/${teamId}/members/${member._id}`,
-        {
-          method: "DELETE",
-        }
-      );
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || "Failed to kick member");
-      }
+      await api.delete(`/api/teams/${teamId}/members/${member._id}`);
       onMemberChange();
     } catch (err) {
       console.error(err);
-      alert(err.message);
+      alert(err.message || "Failed to kick member");
     } finally {
       setLoading(false);
     }
@@ -119,20 +85,11 @@ const MemberRow = ({
 
     setLoading(true);
     try {
-      const res = await makeAuthenticatedRequest(
-        `${API_BASE}/api/teams/${teamId}/members/self`,
-        {
-          method: "DELETE",
-        }
-      );
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || "Failed to leave team");
-      }
+      await api.delete(`/api/teams/${teamId}/members/self`);
       onMemberChange();
     } catch (err) {
       console.error(err);
-      alert(err.message);
+      alert(err.message || "Failed to leave team");
     } finally {
       setLoading(false);
     }

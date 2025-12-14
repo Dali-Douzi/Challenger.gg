@@ -60,13 +60,26 @@ exports.getGames = async (req, res) => {
   }
 };
 
+// ✅ FIXED: Improved getMyTeams with better debugging and consistent response
 exports.getMyTeams = async (req, res) => {
   try {
-    console.log("🔍 getMyTeams called for user:", req.user.userId);
+    console.log("🔍 [TEAMS] getMyTeams called");
+    console.log("🔍 [TEAMS] req.user:", req.user);
     
-    const userId = req.user.userId;
+    // ✅ FIX: Get user ID from multiple possible properties
+    const userId = req.user.userId || req.user.id;
     
-    // ✅ FIX: Find teams where user is EITHER owner OR member
+    if (!userId) {
+      console.error("❌ [TEAMS] No user ID found in request");
+      return res.status(401).json({
+        success: false,
+        message: "User ID not found in request"
+      });
+    }
+    
+    console.log("✅ [TEAMS] Resolved userId:", userId);
+    
+    // ✅ Find teams where user is EITHER owner OR member
     const teams = await Team.find({
       $or: [
         { owner: userId },
@@ -78,15 +91,27 @@ exports.getMyTeams = async (req, res) => {
       .populate("game", "name formats servers ranks")
       .sort({ createdAt: -1 });
 
-    console.log("🔍 Found teams:", teams.length);
-
-    // ✅ FIX: Return in standardized format
+    console.log("✅ [TEAMS] Found teams:", teams.length);
+    console.log("🔍 [TEAMS] Team details:", teams.map(t => ({
+      id: t._id,
+      name: t.name,
+      owner: t.owner?._id || t.owner,
+      memberCount: t.members?.length,
+      members: t.members?.map(m => ({
+        userId: m.user?._id || m.user,
+        role: m.role
+      }))
+    })));
+    
+    // ✅ Return in standardized format
     res.status(200).json({
       success: true,
-      data: teams
+      data: teams,
+      count: teams.length
     });
   } catch (error) {
-    console.error("❌ Error fetching user teams:", error);
+    console.error("❌ [TEAMS] Error fetching user teams:", error);
+    console.error("❌ [TEAMS] Error stack:", error.stack);
     res.status(500).json({
       success: false,
       message: "Error fetching user teams",
@@ -98,7 +123,9 @@ exports.getMyTeams = async (req, res) => {
 exports.createTeam = async (req, res) => {
   try {
     const { name, game, rank, server, description } = req.body;
-    const userId = req.user.userId;
+    const userId = req.user.userId || req.user.id;
+
+    console.log("🔍 [CREATE-TEAM] Request data:", { name, game, rank, server, userId });
 
     if (!name || !game || !rank || !server) {
       return res.status(400).json({
@@ -128,6 +155,8 @@ exports.createTeam = async (req, res) => {
       logo: req.file ? req.file.path : "",
     };
 
+    console.log("🔍 [CREATE-TEAM] Creating team with data:", newTeamData);
+
     const newTeam = new Team(newTeamData);
     await newTeam.save();
 
@@ -141,23 +170,28 @@ exports.createTeam = async (req, res) => {
       .populate("members.user", "username email avatar")
       .populate("game", "name");
 
+    console.log("✅ [CREATE-TEAM] Team created:", populatedTeam.name);
+
     res.status(201).json({
       success: true,
       team: populatedTeam,
     });
   } catch (error) {
-    console.error("Error creating team:", error);
+    console.error("❌ [CREATE-TEAM] Error:", error);
     res.status(500).json({
       success: false,
       message: "Error creating team",
+      error: error.message
     });
   }
 };
 
 exports.joinTeamByCode = async (req, res) => {
   try {
-    const userId = req.user.userId;
+    const userId = req.user.userId || req.user.id;
     const { teamCode } = req.body;
+
+    console.log("🔍 [JOIN-TEAM] Join request:", { userId, teamCode });
 
     if (!teamCode) {
       return res.status(400).json({
@@ -194,24 +228,30 @@ exports.joinTeamByCode = async (req, res) => {
       .populate("members.user", "username email avatar")
       .populate("game", "name");
 
+    console.log("✅ [JOIN-TEAM] User joined team:", updatedTeam.name);
+
     res.status(200).json({
       success: true,
       message: "Joined team successfully",
       team: updatedTeam,
     });
   } catch (error) {
-    console.error("Error joining team:", error);
+    console.error("❌ [JOIN-TEAM] Error:", error);
     res.status(500).json({
       success: false,
       message: "Error joining team",
+      error: error.message
     });
   }
 };
 
-// FIXED: Now includes availableRanks in response
+// ✅ FIXED: Now includes availableRanks in response
 exports.getTeamById = async (req, res) => {
   try {
     const teamId = req.params.id;
+    
+    console.log("🔍 [GET-TEAM] Fetching team:", teamId);
+    
     const team = await Team.findById(teamId)
       .populate("members.user", "username email avatar")
       .populate("game", "name ranks servers");
@@ -227,6 +267,8 @@ exports.getTeamById = async (req, res) => {
     const gameDoc = await Game.findById(team.game._id || team.game);
     const availableRanks = gameDoc ? gameDoc.ranks : [];
 
+    console.log("✅ [GET-TEAM] Team found:", team.name, "Ranks:", availableRanks.length);
+
     // Return team with availableRanks
     const teamResponse = {
       ...team.toObject(),
@@ -235,10 +277,11 @@ exports.getTeamById = async (req, res) => {
 
     res.status(200).json(teamResponse);
   } catch (error) {
-    console.error("Error fetching team:", error);
+    console.error("❌ [GET-TEAM] Error:", error);
     res.status(500).json({
       success: false,
       message: "Error fetching team",
+      error: error.message
     });
   }
 };
@@ -246,8 +289,10 @@ exports.getTeamById = async (req, res) => {
 exports.updateTeam = async (req, res) => {
   try {
     const teamId = req.params.id;
-    const userId = req.user.userId;
+    const userId = req.user.userId || req.user.id;
     const { name, game, rank, server, description } = req.body;
+
+    console.log("🔍 [UPDATE-TEAM] Update request:", { teamId, userId, changes: { name, game, rank, server } });
 
     const team = await Team.findById(teamId);
     if (!team) {
@@ -292,15 +337,18 @@ exports.updateTeam = async (req, res) => {
       .populate("members.user", "username email avatar")
       .populate("game", "name");
 
+    console.log("✅ [UPDATE-TEAM] Team updated:", updatedTeam.name);
+
     res.status(200).json({
       success: true,
       team: updatedTeam,
     });
   } catch (error) {
-    console.error("Error updating team:", error);
+    console.error("❌ [UPDATE-TEAM] Error:", error);
     res.status(500).json({
       success: false,
       message: "Error updating team",
+      error: error.message
     });
   }
 };
@@ -308,7 +356,9 @@ exports.updateTeam = async (req, res) => {
 exports.updateTeamLogo = async (req, res) => {
   try {
     const teamId = req.params.id;
-    const userId = req.user.userId;
+    const userId = req.user.userId || req.user.id;
+
+    console.log("🔍 [UPDATE-LOGO] Request:", { teamId, userId });
 
     const team = await Team.findById(teamId);
     if (!team) {
@@ -343,15 +393,18 @@ exports.updateTeamLogo = async (req, res) => {
       .populate("members.user", "username email avatar")
       .populate("game", "name");
 
+    console.log("✅ [UPDATE-LOGO] Logo updated for team:", updatedTeam.name);
+
     res.status(200).json({
       success: true,
       team: updatedTeam,
     });
   } catch (error) {
-    console.error("Error updating logo:", error);
+    console.error("❌ [UPDATE-LOGO] Error:", error);
     res.status(500).json({
       success: false,
       message: "Error updating logo",
+      error: error.message
     });
   }
 };
@@ -359,7 +412,9 @@ exports.updateTeamLogo = async (req, res) => {
 exports.deleteTeamLogo = async (req, res) => {
   try {
     const teamId = req.params.id;
-    const userId = req.user.userId;
+    const userId = req.user.userId || req.user.id;
+
+    console.log("🔍 [DELETE-LOGO] Request:", { teamId, userId });
 
     const team = await Team.findById(teamId);
     if (!team) {
@@ -386,15 +441,18 @@ exports.deleteTeamLogo = async (req, res) => {
       .populate("members.user", "username email avatar")
       .populate("game", "name");
 
+    console.log("✅ [DELETE-LOGO] Logo deleted for team:", updatedTeam.name);
+
     res.status(200).json({
       success: true,
       team: updatedTeam,
     });
   } catch (error) {
-    console.error("Error deleting logo:", error);
+    console.error("❌ [DELETE-LOGO] Error:", error);
     res.status(500).json({
       success: false,
       message: "Error deleting logo",
+      error: error.message
     });
   }
 };
@@ -402,8 +460,10 @@ exports.deleteTeamLogo = async (req, res) => {
 exports.joinTeamById = async (req, res) => {
   try {
     const teamId = req.params.id;
-    const userId = req.user.userId;
+    const userId = req.user.userId || req.user.id;
     const { code } = req.body;
+
+    console.log("🔍 [JOIN-BY-ID] Request:", { teamId, userId, code });
 
     const team = await Team.findById(teamId);
     if (!team) {
@@ -440,16 +500,19 @@ exports.joinTeamById = async (req, res) => {
       .populate("members.user", "username email avatar")
       .populate("game", "name");
 
+    console.log("✅ [JOIN-BY-ID] User joined team:", updatedTeam.name);
+
     res.status(200).json({
       success: true,
       message: "Joined team",
       team: updatedTeam,
     });
   } catch (error) {
-    console.error("Error joining team:", error);
+    console.error("❌ [JOIN-BY-ID] Error:", error);
     res.status(500).json({
       success: false,
       message: "Error joining team",
+      error: error.message
     });
   }
 };
@@ -457,7 +520,9 @@ exports.joinTeamById = async (req, res) => {
 exports.deleteTeam = async (req, res) => {
   try {
     const teamId = req.params.id;
-    const userId = req.user.userId;
+    const userId = req.user.userId || req.user.id;
+
+    console.log("🔍 [DELETE-TEAM] Request:", { teamId, userId });
 
     const team = await Team.findById(teamId);
     if (!team) {
@@ -474,7 +539,7 @@ exports.deleteTeam = async (req, res) => {
       });
     }
 
-    console.log(`🗑️ Team deletion initiated: ${team.name} by user ${userId}`);
+    console.log(`🗑️ [DELETE-TEAM] Team deletion initiated: ${team.name} by user ${userId}`);
 
     if (team.logo) {
       await deleteOldLogo(team.logo);
@@ -492,10 +557,10 @@ exports.deleteTeam = async (req, res) => {
 
     await Team.findByIdAndDelete(teamId);
 
-    console.log(`✅ Team deleted: ${team.name}`);
+    console.log(`✅ [DELETE-TEAM] Team deleted: ${team.name}`);
 
     try {
-      console.log("🧹 Cleaning scrims where deleted team was posting team...");
+      console.log("🧹 [DELETE-TEAM] Cleaning scrims where deleted team was posting team...");
 
       const orphanedScrims = await Scrim.find({ teamA: teamId });
       let cleanedScrims = 0;
@@ -527,7 +592,7 @@ exports.deleteTeam = async (req, res) => {
 
         await Scrim.findByIdAndDelete(scrim._id);
         cleanedScrims++;
-        console.log(`🧹 Cleaned orphaned scrim: ${scrim._id}`);
+        console.log(`🧹 [DELETE-TEAM] Cleaned orphaned scrim: ${scrim._id}`);
       }
 
       const updatedScrims = await Scrim.updateMany(
@@ -536,10 +601,10 @@ exports.deleteTeam = async (req, res) => {
       );
 
       console.log(
-        `✅ Team deletion cleanup completed: ${cleanedScrims} scrims removed, ${updatedScrims.modifiedCount} scrims updated`
+        `✅ [DELETE-TEAM] Cleanup completed: ${cleanedScrims} scrims removed, ${updatedScrims.modifiedCount} scrims updated`
       );
     } catch (cleanupError) {
-      console.error("⚠️ Team deletion cleanup failed:", cleanupError);
+      console.error("⚠️ [DELETE-TEAM] Cleanup failed:", cleanupError);
     }
 
     res.status(200).json({
@@ -547,10 +612,11 @@ exports.deleteTeam = async (req, res) => {
       message: "Team deleted successfully",
     });
   } catch (error) {
-    console.error("Error deleting team:", error);
+    console.error("❌ [DELETE-TEAM] Error:", error);
     res.status(500).json({
       success: false,
       message: "Error deleting team",
+      error: error.message
     });
   }
 };
@@ -559,7 +625,9 @@ exports.updateMemberRole = async (req, res) => {
   try {
     const { teamId, memberId } = req.params;
     const { role } = req.body;
-    const userId = req.user.userId;
+    const userId = req.user.userId || req.user.id;
+
+    console.log("🔍 [UPDATE-ROLE] Request:", { teamId, memberId, role, userId });
 
     const team = await Team.findById(teamId);
     if (!team) {
@@ -591,15 +659,18 @@ exports.updateMemberRole = async (req, res) => {
       .populate("members.user", "username email avatar")
       .populate("game", "name");
 
+    console.log("✅ [UPDATE-ROLE] Role updated for member in team:", updatedTeam.name);
+
     res.status(200).json({
       success: true,
       team: updatedTeam,
     });
   } catch (error) {
-    console.error("Error updating role:", error);
+    console.error("❌ [UPDATE-ROLE] Error:", error);
     res.status(500).json({
       success: false,
       message: "Error updating role",
+      error: error.message
     });
   }
 };
@@ -608,7 +679,9 @@ exports.updateMemberRank = async (req, res) => {
   try {
     const { teamId, memberId } = req.params;
     const { rank } = req.body;
-    const userId = req.user.userId;
+    const userId = req.user.userId || req.user.id;
+
+    console.log("🔍 [UPDATE-RANK] Request:", { teamId, memberId, rank, userId });
 
     const team = await Team.findById(teamId);
     if (!team) {
@@ -640,15 +713,18 @@ exports.updateMemberRank = async (req, res) => {
       .populate("members.user", "username email avatar")
       .populate("game", "name");
 
+    console.log("✅ [UPDATE-RANK] Rank updated for member in team:", updatedTeam.name);
+
     res.status(200).json({
       success: true,
       team: updatedTeam,
     });
   } catch (error) {
-    console.error("Error updating rank:", error);
+    console.error("❌ [UPDATE-RANK] Error:", error);
     res.status(500).json({
       success: false,
       message: "Error updating rank",
+      error: error.message
     });
   }
 };
@@ -656,7 +732,9 @@ exports.updateMemberRank = async (req, res) => {
 exports.leaveTeam = async (req, res) => {
   try {
     const teamId = req.params.teamId;
-    const userId = req.user.userId;
+    const userId = req.user.userId || req.user.id;
+
+    console.log("🔍 [LEAVE-TEAM] Request:", { teamId, userId });
 
     const team = await Team.findById(teamId);
     if (!team) {
@@ -688,16 +766,19 @@ exports.leaveTeam = async (req, res) => {
       .populate("members.user", "username email avatar")
       .populate("game", "name");
 
+    console.log("✅ [LEAVE-TEAM] User left team:", updatedTeam.name);
+
     res.status(200).json({
       success: true,
       message: "Left team",
       team: updatedTeam,
     });
   } catch (error) {
-    console.error("Error leaving team:", error);
+    console.error("❌ [LEAVE-TEAM] Error:", error);
     res.status(500).json({
       success: false,
       message: "Error leaving team",
+      error: error.message
     });
   }
 };
@@ -705,7 +786,9 @@ exports.leaveTeam = async (req, res) => {
 exports.removeMember = async (req, res) => {
   try {
     const { teamId, memberId } = req.params;
-    const userId = req.user.userId;
+    const userId = req.user.userId || req.user.id;
+
+    console.log("🔍 [REMOVE-MEMBER] Request:", { teamId, memberId, userId });
 
     const team = await Team.findById(teamId);
     if (!team) {
@@ -752,16 +835,19 @@ exports.removeMember = async (req, res) => {
       .populate("members.user", "username email avatar")
       .populate("game", "name");
 
+    console.log("✅ [REMOVE-MEMBER] Member removed from team:", updatedTeam.name);
+
     res.status(200).json({
       success: true,
       message: "Member removed",
       team: updatedTeam,
     });
   } catch (error) {
-    console.error("Error removing member:", error);
+    console.error("❌ [REMOVE-MEMBER] Error:", error);
     res.status(500).json({
       success: false,
       message: "Error removing member",
+      error: error.message
     });
   }
 };

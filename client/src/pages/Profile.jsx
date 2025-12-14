@@ -59,24 +59,42 @@ const Profile = React.memo(() => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [dominantColors, setDominantColors] = useState({
-    primary: "rgba(25, 118, 210, 0.08)",
-    secondary: "rgba(156, 39, 176, 0.08)",
+    primary: "rgba(0, 255, 255, 0.15)", // Cyan from theme
+    secondary: "rgba(255, 0, 255, 0.10)", // Magenta from theme
   });
+  // ✨ Store colors for each team logo
+  const [teamColors, setTeamColors] = useState({});
 
   // Fetch user teams
   useEffect(() => {
     if (user) {
       teamService.getMyTeams()
-  .then((teams) => {
-    const teamsWithRole = teams.map((team) => {
-      const member = team.members.find(
-        (m) => m.user._id.toString() === user.id
-      );
-      return { team, role: member?.role || "player" };
-    });
-    setUserTeams(teamsWithRole);
-  })
-  .catch((err) => console.error("Error fetching teams:", err));
+        .then((response) => {
+          // ✅ Handle multiple response formats
+          let teams = [];
+          if (Array.isArray(response)) {
+            teams = response;
+          } else if (response.data && Array.isArray(response.data)) {
+            teams = response.data;
+          } else if (response.success && Array.isArray(response.data)) {
+            teams = response.data;
+          }
+          
+          const teamsWithRole = teams.map((team) => {
+            const member = team.members?.find(
+              (m) => {
+                const memberId = m.user?._id ? m.user._id.toString() : m.user?.toString();
+                return memberId === user.id;
+              }
+            );
+            return { team, role: member?.role || "player" };
+          });
+          setUserTeams(teamsWithRole);
+        })
+        .catch((err) => {
+          console.error("Error fetching teams:", err);
+          setUserTeams([]);
+        });
 
       setFormValues((prev) => ({
         ...prev,
@@ -159,15 +177,15 @@ const Profile = React.memo(() => {
           const color2 = sortedColors[1][0]; // Second most dominant
 
           setDominantColors({
-            primary: `rgba(${color1}, 0.15)`, // Slightly more opacity for primary
-            secondary: `rgba(${color2}, 0.10)`, // Less opacity for secondary
+            primary: `rgba(${color1}, 0.20)`, // ✨ More vibrant!
+            secondary: `rgba(${color2}, 0.15)`, // ✨ More visible!
           });
         } else if (sortedColors.length === 1) {
           // Fallback: use single color with different opacities
           const color1 = sortedColors[0][0];
           setDominantColors({
-            primary: `rgba(${color1}, 0.15)`,
-            secondary: `rgba(${color1}, 0.08)`,
+            primary: `rgba(${color1}, 0.20)`,
+            secondary: `rgba(${color1}, 0.12)`,
           });
         }
       } catch (error) {
@@ -180,15 +198,83 @@ const Profile = React.memo(() => {
 
   // Extract colors when avatar changes
   useEffect(() => {
-    if (avatarSrc && avatarSrc.startsWith("http")) {
+    if (avatarSrc) {
       extractColorsFromImage(avatarSrc);
     }
   }, [avatarSrc, extractColorsFromImage]);
 
+  // ✨ Extract colors from team logos
+  useEffect(() => {
+    userTeams.forEach(({ team }) => {
+      if (team.logo && !teamColors[team._id]) {
+        extractTeamColors(team._id, team.logo);
+      }
+    });
+  }, [userTeams]);
+
+  const extractTeamColors = useCallback((teamId, logoSrc) => {
+    if (!logoSrc) return;
+
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        canvas.width = img.width;
+        canvas.height = img.height;
+
+        ctx.drawImage(img, 0, 0);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+
+        const colorMap = {};
+        const tolerance = 40;
+
+        for (let i = 0; i < imageData.length; i += 16) {
+          const r = imageData[i];
+          const g = imageData[i + 1];
+          const b = imageData[i + 2];
+          const alpha = imageData[i + 3];
+
+          if (alpha < 128) continue;
+
+          const brightness = (r + g + b) / 3;
+          if (brightness < 30 || brightness > 225) continue;
+
+          const key = `${Math.floor(r / tolerance) * tolerance},${
+            Math.floor(g / tolerance) * tolerance
+          },${Math.floor(b / tolerance) * tolerance}`;
+          colorMap[key] = (colorMap[key] || 0) + 1;
+        }
+
+        const sortedColors = Object.entries(colorMap)
+          .sort(([, a], [, b]) => b - a)
+          .slice(0, 2);
+
+        if (sortedColors.length >= 1) {
+          const color1 = sortedColors[0][0];
+          const color2 = sortedColors.length > 1 ? sortedColors[1][0] : color1;
+
+          setTeamColors(prev => ({
+            ...prev,
+            [teamId]: {
+              primary: `rgba(${color1}, 0.12)`, // Subtle for team cards
+              secondary: `rgba(${color2}, 0.08)`,
+            }
+          }));
+        }
+      } catch (error) {
+        console.log(`Color extraction failed for team ${teamId}`);
+      }
+    };
+    img.src = logoSrc;
+  }, []);
+
   // Validation functions
   const validateForm = useCallback(
     (type) => {
-      if (!formValues.currentPassword) {
+      // ✅ Only password changes require current password
+      if (type === "password" && !formValues.currentPassword) {
         return "Current password is required";
       }
 
@@ -292,20 +378,16 @@ const Profile = React.memo(() => {
 
       switch (openDialog.type) {
         case "avatar":
-          // Avatar update now requires current password
-          result = await updateAvatar(avatarFile, formValues.currentPassword);
+          // ✅ No password required for avatar update
+          result = await updateAvatar(avatarFile);
           break;
         case "username":
-          result = await updateUsername(
-            formValues.newUsername,
-            formValues.currentPassword
-          );
+          // ✅ No password required for username update
+          result = await updateUsername(formValues.newUsername);
           break;
         case "email":
-          result = await updateEmail(
-            formValues.newEmail,
-            formValues.currentPassword
-          );
+          // ✅ No password required for email update
+          result = await updateEmail(formValues.newEmail);
           break;
         case "password":
           result = await updatePassword(
@@ -389,9 +471,26 @@ const Profile = React.memo(() => {
         sx={{
           mb: 4,
           borderRadius: 4,
-          background: `linear-gradient(135deg, ${dominantColors.primary} 0%, ${dominantColors.secondary} 100%)`,
-          border: "1px solid rgba(255, 255, 255, 0.1)",
+          position: "relative",
           overflow: "visible",
+          border: "1px solid rgba(255, 255, 255, 0.1)",
+          // Dynamic gradient background based on avatar colors
+          background: `linear-gradient(135deg, ${dominantColors.primary} 0%, ${dominantColors.secondary} 100%)`,
+          // Add subtle overlay for depth
+          "&::before": {
+            content: '""',
+            position: "absolute",
+            inset: 0,
+            background: `radial-gradient(circle at 30% 50%, ${dominantColors.primary.replace('0.15', '0.25')} 0%, transparent 50%)`,
+            pointerEvents: "none",
+            borderRadius: 4,
+          },
+          // Animated glow effect
+          boxShadow: `
+            0 8px 32px rgba(0, 0, 0, 0.12),
+            0 0 60px ${dominantColors.primary.replace('0.15', '0.3')},
+            0 0 100px ${dominantColors.secondary.replace('0.10', '0.2')}
+          `,
         }}
       >
         <CardContent sx={{ p: 4 }}>
@@ -412,9 +511,14 @@ const Profile = React.memo(() => {
                   height: 140,
                   border: "6px solid",
                   borderColor: "background.paper",
-                  boxShadow: "0 8px 32px rgba(0, 0, 0, 0.12)",
                   fontSize: "3rem",
                   fontWeight: 700,
+                  // ✨ Dynamic glow based on avatar colors
+                  boxShadow: `
+                    0 8px 32px rgba(0, 0, 0, 0.12),
+                    0 0 40px ${dominantColors.primary.replace('0.20', '0.4')},
+                    0 0 60px ${dominantColors.secondary.replace('0.15', '0.3')}
+                  `,
                 }}
               >
                 {!avatarSrc && user.username?.[0]?.toUpperCase()}
@@ -540,7 +644,14 @@ const Profile = React.memo(() => {
                 gap: 3,
               }}
             >
-              {userTeams.map(({ team, role }) => (
+              {userTeams.map(({ team, role }) => {
+                // Get colors for this team, or use defaults
+                const colors = teamColors[team._id] || {
+                  primary: "rgba(0, 255, 255, 0.08)",
+                  secondary: "rgba(255, 0, 255, 0.05)",
+                };
+                
+                return (
                 <Paper
                   key={team._id}
                   elevation={3}
@@ -551,10 +662,27 @@ const Profile = React.memo(() => {
                     cursor: "pointer",
                     transition: "all 0.3s ease",
                     border: "1px solid rgba(255, 255, 255, 0.1)",
+                    position: "relative",
+                    overflow: "hidden",
+                    // ✨ Dynamic gradient from team logo
+                    background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`,
+                    // Subtle overlay
+                    "&::before": {
+                      content: '""',
+                      position: "absolute",
+                      inset: 0,
+                      background: `radial-gradient(circle at 50% 30%, ${colors.primary.replace('0.12', '0.15')} 0%, transparent 60%)`,
+                      pointerEvents: "none",
+                      opacity: 0,
+                      transition: "opacity 0.3s ease",
+                    },
                     "&:hover": {
                       transform: "translateY(-4px)",
                       boxShadow: 6,
                       borderColor: "primary.main",
+                      "&::before": {
+                        opacity: 1,
+                      }
                     },
                   }}
                 >
@@ -574,8 +702,13 @@ const Profile = React.memo(() => {
                         mb: 2,
                         fontSize: "1.5rem",
                         fontWeight: "bold",
-                        background:
+                        background: team.logo ? "transparent" : 
                           "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                        // ✨ Subtle glow matching team colors
+                        boxShadow: `
+                          0 4px 16px rgba(0, 0, 0, 0.1),
+                          0 0 20px ${colors.primary.replace('0.12', '0.3')}
+                        `,
                       }}
                     >
                       {team.name[0]?.toUpperCase()}
@@ -605,7 +738,8 @@ const Profile = React.memo(() => {
                     />
                   </Box>
                 </Paper>
-              ))}
+                );
+              })}
             </Box>
           ) : (
             <Box sx={{ textAlign: "center", py: 8, color: "text.secondary" }}>
@@ -694,22 +828,6 @@ const Profile = React.memo(() => {
 
           {openDialog.type === "avatar" && (
             <Stack spacing={3} alignItems="center" sx={{ mt: 2 }}>
-              <TextField
-                label="Current Password"
-                name="currentPassword"
-                type="password"
-                value={formValues.currentPassword}
-                onChange={handleChange}
-                disabled={isSubmitting}
-                fullWidth
-                variant="outlined"
-                helperText="Required to confirm your identity"
-                autoComplete="off"
-                sx={{
-                  "& .MuiOutlinedInput-root": { borderRadius: 2 },
-                }}
-              />
-
               <Avatar
                 src={avatarSrc}
                 sx={{
@@ -779,22 +897,6 @@ const Profile = React.memo(() => {
           {openDialog.type === "username" && (
             <Stack spacing={3} sx={{ mt: 2 }}>
               <TextField
-                label="Current Password"
-                name="currentPassword"
-                type="password"
-                value={formValues.currentPassword}
-                onChange={handleChange}
-                disabled={isSubmitting}
-                fullWidth
-                variant="outlined"
-                helperText="Required to confirm your identity"
-                autoComplete="off"
-                sx={{
-                  "& .MuiOutlinedInput-root": { borderRadius: 2 },
-                }}
-              />
-
-              <TextField
                 label="Current Username"
                 value={formValues.currentUsername}
                 disabled
@@ -830,22 +932,6 @@ const Profile = React.memo(() => {
 
           {openDialog.type === "email" && (
             <Stack spacing={3} sx={{ mt: 2 }}>
-              <TextField
-                label="Current Password"
-                name="currentPassword"
-                type="password"
-                value={formValues.currentPassword}
-                onChange={handleChange}
-                disabled={isSubmitting}
-                fullWidth
-                variant="outlined"
-                helperText="Required to confirm your identity"
-                autoComplete="off"
-                sx={{
-                  "& .MuiOutlinedInput-root": { borderRadius: 2 },
-                }}
-              />
-
               <TextField
                 label="Current Email"
                 value={formValues.currentEmail}

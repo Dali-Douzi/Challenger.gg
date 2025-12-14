@@ -55,22 +55,32 @@ const CreateTeam = () => {
   const [serversList, setServersList] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-useEffect(() => {
+  useEffect(() => {
     const fetchGames = async () => {
-        try {
-            const games = await teamService.getGames();
-            if (Array.isArray(games.data)) {
-                setGamesList(games.data);
-            } else if (Array.isArray(games)) {
-                setGamesList(games);
-            }
-        } catch (err) {
-            console.error("Error fetching games:", err);
-            setGamesList([]);
+      try {
+        const response = await teamService.getGames();
+        
+        // ✅ Handle multiple response formats
+        let gamesArray = [];
+        if (Array.isArray(response)) {
+          // Direct array response
+          gamesArray = response;
+        } else if (response.data && Array.isArray(response.data)) {
+          // Wrapped in { data: [...] } or { success: true, data: [...] }
+          gamesArray = response.data;
+        } else if (response.success && Array.isArray(response.data)) {
+          // Explicit success wrapper
+          gamesArray = response.data;
         }
+        
+        setGamesList(gamesArray);
+      } catch (err) {
+        console.error("Error fetching games:", err);
+        setGamesList([]);
+      }
     };
     fetchGames();
-}, []);
+  }, []);
 
   const handleGameChange = (event) => {
     const selectedGameName = event.target.value;
@@ -113,28 +123,20 @@ useEffect(() => {
     }
     setIsSubmitting(true);
     try {
-      const formData = new FormData();
-      formData.append("name", name);
-      formData.append("game", game);
-      formData.append("rank", rank);
-      formData.append("server", server);
-      if (description) formData.append("description", description);
-      if (logoFile) formData.append("logo", logoFile);
-
       const result = await teamService.createTeam(
-  { name, game, rank, server, description },
-  logoFile
-    );
+        { name, game, rank, server, description },
+        logoFile
+      );
 
-if (result.success) {
-  alert("Team created successfully!");
-  navigate(`/teams/${result.team._id}`);
-} else {
-  alert(result.message || "Failed to create team");
-}
+      if (result.success) {
+        alert("Team created successfully!");
+        navigate(`/teams/${result.team._id}`);
+      } else {
+        alert(result.message || "Failed to create team");
+      }
     } catch (err) {
       console.error("Team creation error:", err);
-      alert("Server error. Please try again.");
+      alert(err.message || "Server error. Please try again.");
     } finally {
       setIsSubmitting(false);
     }

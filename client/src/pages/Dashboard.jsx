@@ -2,12 +2,8 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import { Box, Typography, Button, Container } from "@mui/material";
 import { useAuth } from "../context/AuthContext";
-
-// Import footer component
 import Footer from "../components/Footer";
 
-// Import images (make sure these exist in your project)
-// If you don't have these images, you can replace them with placeholder colors
 import teamsBg from "../images/teams-bg.jpg";
 import scrimsBg from "../images/scrims-bg.jpg";
 import tournamentsBg from "../images/tournaments-bg.jpg";

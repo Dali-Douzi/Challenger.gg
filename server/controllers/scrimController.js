@@ -1,3 +1,4 @@
+// server/controllers/scrimController.js
 const mongoose = require("mongoose");
 const Scrim = require("../models/Scrim");
 const Team = require("../models/Team");
@@ -6,7 +7,6 @@ const Notification = require("../models/Notification");
 const Chat = require("../models/Chat");
 const eventService = require("../services/eventService");
 
-// Helper Functions
 const validateObjectId = (id, fieldName = "ID") => {
   if (!mongoose.Types.ObjectId.isValid(id)) {
     throw new Error(`Invalid ${fieldName} format`);
@@ -14,26 +14,38 @@ const validateObjectId = (id, fieldName = "ID") => {
 };
 
 const checkTeamPermission = (team, userId) => {
-  const isOwner = team.owner.toString() === userId;
-  const isManager = team.members.some(
-    (m) => m.user.toString() === userId && m.role === "manager"
-  );
-  return { isOwner, isManager, hasPermission: isOwner || isManager };
+  try {
+    const userIdStr = userId ? userId.toString() : null;
+    if (!userIdStr) return { isOwner: false, isManager: false, hasPermission: false };
+    
+    const isOwner = team.owner && team.owner.toString() === userIdStr;
+    const isManager = team.members && team.members.some(
+      (m) => m.user && m.user.toString() === userIdStr && m.role === "manager"
+    );
+    return { isOwner, isManager, hasPermission: isOwner || isManager };
+  } catch (error) {
+    console.error("Error in checkTeamPermission:", error);
+    return { isOwner: false, isManager: false, hasPermission: false };
+  }
 };
 
-// LIST SCRIMS - Fixed with safety checks
 exports.listScrims = async (req, res) => {
   try {
-    console.log("🔥🔥🔥 NEW LISTSCRIMS CODE IS RUNNING! 🔥🔥🔥");
+    console.log("📋 [LIST-SCRIMS] Request received");
+    console.log("📋 [LIST-SCRIMS] Query params:", req.query);
+    
     const { game, server, rank, status } = req.query;
 
     const filter = {};
 
     if (game) {
+      console.log("🎮 [LIST-SCRIMS] Filtering by game:", game);
       const gameDoc = await Game.findOne({ name: game }).select("_id");
       if (gameDoc) {
         filter.game = gameDoc._id;
+        console.log("✅ [LIST-SCRIMS] Game found:", gameDoc._id);
       } else {
+        console.log("⚠️ [LIST-SCRIMS] Game not found:", game);
         return res.json({
           success: true,
           data: [],
@@ -45,20 +57,23 @@ exports.listScrims = async (req, res) => {
 
     if (status) {
       filter.status = status;
+      console.log("📊 [LIST-SCRIMS] Filtering by status:", status);
     }
 
-    console.log("Scrim filters applied:", filter);
+    console.log("🔍 [LIST-SCRIMS] Database filter:", filter);
 
     let scrims = await Scrim.find(filter)
       .populate("teamA", "name logo game rank server")
       .populate("teamB", "name logo game rank server")
       .populate("game", "name")
       .populate("requests", "name logo")
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
 
-    // ✅ FIX: Safety check
+    console.log(`✅ [LIST-SCRIMS] Database query returned ${scrims.length} scrims`);
+
     if (!scrims || !Array.isArray(scrims)) {
-      console.error("❌ Scrims is not an array:", scrims);
+      console.error("❌ [LIST-SCRIMS] Scrims is not an array:", scrims);
       return res.json({
         success: true,
         data: [],
@@ -66,32 +81,33 @@ exports.listScrims = async (req, res) => {
       });
     }
 
-    console.log(`Found ${scrims.length} scrims after query`);
-
     if (server || rank) {
+      console.log("🔍 [LIST-SCRIMS] Applying server/rank filters:", { server, rank });
+      
       scrims = scrims.filter((scrim) => {
-        if (!scrim) return false;
+        if (!scrim || !scrim.teamA) {
+          console.warn("⚠️ [LIST-SCRIMS] Invalid scrim in results:", scrim);
+          return false;
+        }
         
         let matchesServer = true;
         let matchesRank = true;
 
         if (server) {
-          matchesServer =
-            scrim.teamA?.server === server ||
-            (scrim.teamB && scrim.teamB.server === server);
+          matchesServer = scrim.teamA.server === server;
         }
 
         if (rank) {
-          matchesRank =
-            scrim.teamA?.rank === rank ||
-            (scrim.teamB && scrim.teamB.rank === rank);
+          matchesRank = scrim.teamA.rank === rank;
         }
 
         return matchesServer && matchesRank;
       });
+      
+      console.log(`✅ [LIST-SCRIMS] After filtering: ${scrims.length} scrims`);
     }
 
-    console.log(`Returning ${scrims.length} scrims after filtering`);
+    console.log(`✅ [LIST-SCRIMS] Returning ${scrims.length} scrims`);
 
     res.json({
       success: true,
@@ -100,22 +116,32 @@ exports.listScrims = async (req, res) => {
       filters: { game, server, rank, status },
     });
   } catch (error) {
-    console.error("List scrims Error:", error);
+    console.error("❌ [LIST-SCRIMS] ERROR:", error);
+    console.error("❌ [LIST-SCRIMS] ERROR Stack:", error.stack);
     res.status(500).json({
       success: false,
       message: "Server error",
       ...(process.env.NODE_ENV === "development" && {
         details: error.message,
+        stack: error.stack,
       }),
     });
   }
 };
 
 exports.createScrim = async (req, res) => {
+  let scrimId = null;
+  
   try {
     const { teamId, format, scheduledTime } = req.body;
+    
+    console.log("📝 [CREATE-SCRIM] === START ===");
+    console.log("📝 [CREATE-SCRIM] Request body:", req.body);
+    console.log("📝 [CREATE-SCRIM] Request user:", req.user);
 
+    // Validation
     if (!teamId || !format || !scheduledTime) {
+      console.log("❌ [CREATE-SCRIM] Missing required fields");
       return res.status(400).json({
         success: false,
         message: "Please provide teamId, format, and scheduledTime",
@@ -124,85 +150,162 @@ exports.createScrim = async (req, res) => {
 
     validateObjectId(teamId, "team ID");
 
-    const team = await Team.findById(teamId).populate("game", "formats name");
+    const userId = req.user.userId || req.user.id;
+    console.log("📝 [CREATE-SCRIM] Extracted userId:", userId);
+
+    // Get team
+    console.log("📝 [CREATE-SCRIM] Fetching team...");
+    const team = await Team.findById(teamId).populate("game", "formats name _id");
     if (!team) {
+      console.log("❌ [CREATE-SCRIM] Team not found");
       return res.status(404).json({
         success: false,
         message: "Team not found",
       });
     }
 
-    const { hasPermission } = checkTeamPermission(team, req.user.userId);
+    console.log("✅ [CREATE-SCRIM] Team found:", { 
+      teamId: team._id, 
+      owner: team.owner,
+      memberCount: team.members?.length 
+    });
+
+    // Check permissions
+    console.log("📝 [CREATE-SCRIM] Checking permissions...");
+    const { hasPermission } = checkTeamPermission(team, userId);
+    console.log("📝 [CREATE-SCRIM] Permission check:", hasPermission);
+    
     if (!hasPermission) {
+      console.log("❌ [CREATE-SCRIM] Permission denied");
       return res.status(403).json({
         success: false,
         message: "Not authorized to create scrim for this team",
       });
     }
 
+    // Get game
+    console.log("📝 [CREATE-SCRIM] Fetching game...");
     let gameDoc = team.game;
-    if (!gameDoc) {
+    console.log("📝 [CREATE-SCRIM] Game from team:", gameDoc);
+    
+    if (!gameDoc || !gameDoc._id) {
+      console.log("📝 [CREATE-SCRIM] Game not populated, fetching...");
       if (mongoose.Types.ObjectId.isValid(team.game)) {
-        gameDoc = await Game.findById(team.game).select("formats name");
+        gameDoc = await Game.findById(team.game).select("formats name _id");
       } else {
-        gameDoc = await Game.findOne({ name: team.game }).select("formats name");
+        gameDoc = await Game.findOne({ name: team.game }).select("formats name _id");
       }
     }
 
     if (!gameDoc) {
+      console.log("❌ [CREATE-SCRIM] Game not found");
       return res.status(404).json({
         success: false,
         message: "Game not found",
       });
     }
 
-    if (!gameDoc.formats.includes(format)) {
+    console.log("✅ [CREATE-SCRIM] Game doc:", { 
+      id: gameDoc._id, 
+      name: gameDoc.name, 
+      formats: gameDoc.formats 
+    });
+
+    // Validate format
+    if (!gameDoc.formats || !gameDoc.formats.includes(format)) {
+      console.log("❌ [CREATE-SCRIM] Invalid format");
       return res.status(400).json({
         success: false,
-        message: `Invalid format for ${gameDoc.name}. Available formats: ${gameDoc.formats.join(", ")}`,
+        message: `Invalid format for ${gameDoc.name}. Available formats: ${gameDoc.formats?.join(", ") || "none"}`,
       });
     }
 
+    // Validate time
     const scheduledDate = new Date(scheduledTime);
+    console.log("📝 [CREATE-SCRIM] Scheduled date:", scheduledDate, "Now:", new Date());
+    
     if (scheduledDate <= new Date()) {
+      console.log("❌ [CREATE-SCRIM] Time in past");
       return res.status(400).json({
         success: false,
         message: "Scheduled time must be in the future",
       });
     }
 
-    const scrim = await Scrim.create({
+    // Create scrim
+    const scrimData = {
       teamA: team._id,
       game: gameDoc._id,
       format,
       scheduledTime: scheduledDate,
       status: "open",
-    });
+    };
 
-    const populatedScrim = await Scrim.findById(scrim._id)
-      .populate("teamA", "name logo game rank server")
-      .populate("game", "name");
+    console.log("📝 [CREATE-SCRIM] Creating scrim with data:", scrimData);
 
-    eventService.emit("scrim:created", {
-      scrimId: scrim._id,
-      teamA: team._id,
-      game: gameDoc._id,
-      format,
-      scheduledTime: scheduledDate,
-    });
+    const scrim = await Scrim.create(scrimData);
+    scrimId = scrim._id;
 
-    res.status(201).json({
+    console.log("✅ [CREATE-SCRIM] Scrim created with ID:", scrimId);
+
+    // Populate scrim
+    console.log("📝 [CREATE-SCRIM] Populating scrim...");
+    let populatedScrim;
+    try {
+      populatedScrim = await Scrim.findById(scrim._id)
+        .populate("teamA", "name logo game rank server")
+        .populate("game", "name")
+        .lean();
+      
+      console.log("✅ [CREATE-SCRIM] Scrim populated successfully");
+    } catch (populateError) {
+      console.error("❌ [CREATE-SCRIM] Populate error:", populateError);
+      // Return unpopulated scrim as fallback
+      populatedScrim = scrim.toObject();
+    }
+
+    // Emit event
+    console.log("📝 [CREATE-SCRIM] Emitting event...");
+    try {
+      eventService.emit("scrim:created", {
+        scrimId: scrim._id,
+        teamA: team._id,
+        game: gameDoc._id,
+        format,
+        scheduledTime: scheduledDate,
+      });
+      console.log("✅ [CREATE-SCRIM] Event emitted successfully");
+    } catch (eventError) {
+      console.error("❌ [CREATE-SCRIM] Event emission error:", eventError);
+      // Continue anyway - event emission failure shouldn't block response
+    }
+
+    // Send response
+    console.log("📝 [CREATE-SCRIM] Sending response...");
+    const responseData = {
       success: true,
       message: "Scrim created successfully",
       data: populatedScrim,
-    });
+    };
+    
+    console.log("📝 [CREATE-SCRIM] Response data:", JSON.stringify(responseData, null, 2));
+    console.log("✅ [CREATE-SCRIM] === SUCCESS ===");
+    
+    return res.status(201).json(responseData);
+
   } catch (error) {
-    console.error("Scrim-create Error:", error);
-    res.status(500).json({
+    console.error("❌ [CREATE-SCRIM] === ERROR ===");
+    console.error("❌ [CREATE-SCRIM] Error:", error);
+    console.error("❌ [CREATE-SCRIM] Error stack:", error.stack);
+    console.error("❌ [CREATE-SCRIM] Scrim ID:", scrimId);
+    
+    return res.status(500).json({
       success: false,
       message: "Server error during scrim creation",
+      scrimId: scrimId, // Include scrim ID so user knows it was created
       ...(process.env.NODE_ENV === "development" && {
         details: error.message,
+        stack: error.stack,
       }),
     });
   }
@@ -212,6 +315,7 @@ exports.requestScrim = async (req, res) => {
   try {
     const { scrimId } = req.params;
     const { teamId } = req.body;
+    const userId = req.user.userId || req.user.id;
 
     if (!teamId) {
       return res.status(400).json({
@@ -248,7 +352,7 @@ exports.requestScrim = async (req, res) => {
       });
     }
 
-    const { hasPermission } = checkTeamPermission(requestingTeam, req.user.userId);
+    const { hasPermission } = checkTeamPermission(requestingTeam, userId);
     if (!hasPermission) {
       return res.status(403).json({
         success: false,
@@ -329,6 +433,7 @@ exports.requestScrim = async (req, res) => {
 exports.getScrim = async (req, res) => {
   try {
     const { scrimId } = req.params;
+    const userId = req.user.userId || req.user.id;
 
     validateObjectId(scrimId, "scrim ID");
 
@@ -345,7 +450,7 @@ exports.getScrim = async (req, res) => {
       });
     }
 
-    const { hasPermission } = checkTeamPermission(scrim.teamA, req.user.userId);
+    const { hasPermission } = checkTeamPermission(scrim.teamA, userId);
     const payload = scrim.toObject();
 
     if (!hasPermission) {
@@ -372,6 +477,7 @@ exports.updateScrim = async (req, res) => {
   try {
     const { scrimId } = req.params;
     const { format, scheduledTime } = req.body;
+    const userId = req.user.userId || req.user.id;
 
     validateObjectId(scrimId, "scrim ID");
 
@@ -391,7 +497,7 @@ exports.updateScrim = async (req, res) => {
       });
     }
 
-    const { hasPermission } = checkTeamPermission(team, req.user.userId);
+    const { hasPermission } = checkTeamPermission(team, userId);
     if (!hasPermission) {
       return res.status(403).json({
         success: false,
@@ -461,6 +567,7 @@ exports.updateScrim = async (req, res) => {
 exports.deleteScrim = async (req, res) => {
   try {
     const { scrimId } = req.params;
+    const userId = req.user.userId || req.user.id;
 
     validateObjectId(scrimId, "scrim ID");
 
@@ -480,7 +587,7 @@ exports.deleteScrim = async (req, res) => {
       });
     }
 
-    const { hasPermission } = checkTeamPermission(team, req.user.userId);
+    const { hasPermission } = checkTeamPermission(team, userId);
     if (!hasPermission) {
       return res.status(403).json({
         success: false,
@@ -513,7 +620,7 @@ exports.deleteScrim = async (req, res) => {
       scrimId: scrimId,
       teamA: scrim.teamA,
       teamB: scrim.teamB,
-      deletedBy: req.user.userId,
+      deletedBy: userId,
     });
 
     const io = req.app.get("io");
@@ -559,6 +666,7 @@ exports.acceptScrim = async (req, res) => {
   try {
     const { scrimId } = req.params;
     const { teamId } = req.body;
+    const userId = req.user.userId || req.user.id;
 
     if (!teamId) {
       return res.status(400).json({
@@ -597,7 +705,7 @@ exports.acceptScrim = async (req, res) => {
       });
     }
 
-    const { hasPermission } = checkTeamPermission(postingTeam, req.user.userId);
+    const { hasPermission } = checkTeamPermission(postingTeam, userId);
     if (!hasPermission) {
       return res.status(403).json({
         success: false,
@@ -686,7 +794,7 @@ exports.acceptScrim = async (req, res) => {
       success: true,
       message: "Scrim request accepted successfully",
       data: updatedScrim,
-      chatId: chatId, // ✅ FIXED - returns chatId
+      chatId: chatId,
     });
   } catch (error) {
     console.error("Scrim-accept Error:", error);
@@ -704,6 +812,7 @@ exports.declineScrim = async (req, res) => {
   try {
     const { scrimId } = req.params;
     const { teamId } = req.body;
+    const userId = req.user.userId || req.user.id;
 
     if (!teamId) {
       return res.status(400).json({
@@ -735,7 +844,7 @@ exports.declineScrim = async (req, res) => {
       });
     }
 
-    const { hasPermission } = checkTeamPermission(team, req.user.userId);
+    const { hasPermission } = checkTeamPermission(team, userId);
     if (!hasPermission) {
       return res.status(403).json({
         success: false,
@@ -757,7 +866,7 @@ exports.declineScrim = async (req, res) => {
       scrimId: scrim._id,
       teamA: scrim.teamA,
       teamB: teamId,
-      declinedBy: req.user.userId,
+      declinedBy: userId,
     });
 
     let chat = await Chat.findOne({
@@ -809,6 +918,7 @@ exports.completeScrim = async (req, res) => {
   try {
     const { scrimId } = req.params;
     const { winner, score } = req.body;
+    const userId = req.user.userId || req.user.id;
 
     validateObjectId(scrimId, "scrim ID");
 
@@ -835,8 +945,8 @@ exports.completeScrim = async (req, res) => {
       Team.findById(scrim.teamB._id),
     ]);
 
-    const hasTeamAPermission = checkTeamPermission(teamA, req.user.userId).hasPermission;
-    const hasTeamBPermission = checkTeamPermission(teamB, req.user.userId).hasPermission;
+    const hasTeamAPermission = checkTeamPermission(teamA, userId).hasPermission;
+    const hasTeamBPermission = checkTeamPermission(teamB, userId).hasPermission;
 
     if (!hasTeamAPermission && !hasTeamBPermission) {
       return res.status(403).json({
@@ -856,7 +966,7 @@ exports.completeScrim = async (req, res) => {
       teamB: scrim.teamB._id,
       winner: winner,
       score: score,
-      completedBy: req.user.userId,
+      completedBy: userId,
     });
 
     const populatedScrim = await Scrim.findById(scrim._id)

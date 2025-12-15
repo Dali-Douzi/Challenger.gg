@@ -11,14 +11,10 @@ import {
   CircularProgress,
   Paper,
 } from "@mui/material";
-import { useAuth } from "../context/AuthContext";
-import { getApiBaseUrl } from '../services/apiClient';
-
-const API_BASE = getApiBaseUrl();
+import api from '../services/apiClient';
 
 export default function EditScrim() {
   const navigate = useNavigate();
-  const { makeAuthenticatedRequest } = useAuth();
   const scrimId = sessionStorage.getItem("editingScrimId");
 
   const [loading, setLoading] = useState(true);
@@ -27,13 +23,12 @@ export default function EditScrim() {
   const [formats, setFormats] = useState([]);
   const [format, setFormat] = useState("");
 
-  const [date, setDate] = useState(""); // e.g. "2025-05-23"
-  const [time, setTime] = useState(""); // e.g. "18:30"
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("");
 
   const [dateOptions, setDateOptions] = useState([]);
   const [timeOptions, setTimeOptions] = useState([]);
 
-  // Helpers to build dropdown lists
   const getDayOptions = () => {
     const opts = ["Today", "Tomorrow"];
     const today = new Date();
@@ -54,7 +49,6 @@ export default function EditScrim() {
     return opts;
   };
 
-  // ─── Load scrim & populate form ─────────────────────────────────────────────
   useEffect(() => {
     if (!scrimId) {
       navigate("/scrims");
@@ -64,19 +58,16 @@ export default function EditScrim() {
     const loadScrim = async () => {
       try {
         setLoading(true);
-        // 1) fetch scrim
-        const res = await makeAuthenticatedRequest(`${API_BASE}/api/scrims/${scrimId}`);
-        if (!res.ok) throw new Error("Failed to load scrim");
-        const scrim = await res.json();
+        
+        const scrimData = await api.get(`/api/scrims/${scrimId}`);
+        const scrim = scrimData.success ? scrimData.data : scrimData;
 
-        // 2) parse and set date/time
         const dt = new Date(scrim.scheduledTime);
         const isoDate = dt.toISOString().slice(0, 10);
         const isoTime = dt.toTimeString().slice(0, 5);
         setDate(isoDate);
         setTime(isoTime);
 
-        // 3) build dropdowns (include current values at top)
         const days = getDayOptions();
         if (!days.includes(isoDate)) days.unshift(isoDate);
         setDateOptions(days);
@@ -85,19 +76,13 @@ export default function EditScrim() {
         if (!times.includes(isoTime)) times.unshift(isoTime);
         setTimeOptions(times);
 
-        // 4) fetch team to get its game
-        const teamRes = await makeAuthenticatedRequest(
-          `${API_BASE}/api/teams/${scrim.teamA._id}`
-        );
-        if (!teamRes.ok) throw new Error("Failed to load team");
-        const team = await teamRes.json();
+        const teamData = await api.get(`/api/teams/${scrim.teamA._id || scrim.teamA}`);
+        const team = teamData.success ? teamData.data : teamData;
 
-        // 5) fetch all games to derive formats
-        const gamesRes = await fetch(`${API_BASE}/api/teams/games`);
-        if (!gamesRes.ok) throw new Error("Failed to load games");
-        const games = await gamesRes.json();
-        const gameDoc =
-          games.find((g) => g._id === team.game || g.name === team.game) || {};
+        const gamesData = await api.get('/api/teams/games');
+        const games = gamesData.success ? gamesData.data : (Array.isArray(gamesData) ? gamesData : []);
+        
+        const gameDoc = games.find((g) => g._id === (team.game?._id || team.game) || g.name === team.game) || {};
         setFormats(gameDoc.formats || []);
         setFormat(scrim.format);
       } catch (err) {
@@ -110,33 +95,22 @@ export default function EditScrim() {
     };
 
     loadScrim();
-  }, [scrimId, navigate, makeAuthenticatedRequest]);
+  }, [scrimId, navigate]);
 
-  // ─── Save changes ─────────────────────────────────────────────────────────────
   const handleSave = async () => {
     setSaving(true);
     try {
-      // build new ISO timestamp from dropdowns
       let dt = new Date();
       if (date === "Tomorrow") dt.setDate(dt.getDate() + 1);
       else if (date !== "Today") dt = new Date(date);
       const [h, m] = time.split(":").map(Number);
       dt.setHours(h, m, 0, 0);
 
-      const res = await makeAuthenticatedRequest(`${API_BASE}/api/scrims/${scrimId}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          format,
-          scheduledTime: dt.toISOString(),
-        }),
+      await api.put(`/api/scrims/${scrimId}`, {
+        format,
+        scheduledTime: dt.toISOString(),
       });
-      if (!res.ok) {
-        const { message } = await res.json();
-        throw new Error(message || "Save failed");
-      }
+
       navigate("/scrims");
     } catch (err) {
       console.error(err);
@@ -146,20 +120,13 @@ export default function EditScrim() {
     }
   };
 
-  // ─── Delete scrim ────────────────────────────────────────────────────────────
   const handleDelete = async () => {
     if (!window.confirm("Are you sure you want to delete this scrim?")) {
       return;
     }
     setSaving(true);
     try {
-      const res = await makeAuthenticatedRequest(`${API_BASE}/api/scrims/${scrimId}`, {
-        method: "DELETE",
-      });
-      if (!res.ok) {
-        const { message } = await res.json();
-        throw new Error(message || "Delete failed");
-      }
+      await api.delete(`/api/scrims/${scrimId}`);
       navigate("/scrims");
     } catch (err) {
       console.error("Delete Error:", err);
@@ -169,7 +136,6 @@ export default function EditScrim() {
     }
   };
 
-  // ─── Render ─────────────────────────────────────────────────────────────────
   if (loading) {
     return (
       <Box sx={{ p: 4, textAlign: "center" }}>
@@ -184,7 +150,6 @@ export default function EditScrim() {
         Edit Scrim
       </Typography>
 
-      {/* Format */}
       <FormControl fullWidth sx={{ mb: 2 }}>
         <InputLabel id="format-label">Format</InputLabel>
         <Select
@@ -201,7 +166,6 @@ export default function EditScrim() {
         </Select>
       </FormControl>
 
-      {/* Date */}
       <FormControl fullWidth sx={{ mb: 2 }}>
         <InputLabel id="date-label">Date</InputLabel>
         <Select
@@ -218,7 +182,6 @@ export default function EditScrim() {
         </Select>
       </FormControl>
 
-      {/* Time */}
       <FormControl fullWidth sx={{ mb: 3 }}>
         <InputLabel id="time-label">Time</InputLabel>
         <Select

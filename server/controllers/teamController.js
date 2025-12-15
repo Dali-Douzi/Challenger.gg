@@ -6,14 +6,12 @@ const Scrim = require("../models/Scrim");
 const Notification = require("../models/Notification");
 const Chat = require("../models/Chat");
 
-// Configure Cloudinary
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// Helper Functions
 const deleteOldLogo = async (logoUrl) => {
   try {
     if (logoUrl && logoUrl.includes("cloudinary")) {
@@ -35,7 +33,6 @@ const generateTeamCode = () => {
   return Math.random().toString(36).slice(2, 8).toUpperCase();
 };
 
-// Controller Methods
 exports.getGames = async (req, res) => {
   try {
     console.log("🎮 Fetching games from database...");
@@ -47,7 +44,11 @@ exports.getGames = async (req, res) => {
     const games = await Game.find({}).lean();
     console.log("🎮 Games found:", games.length);
 
-    res.json(games);
+    res.json({
+      success: true,
+      data: games,
+      count: games.length
+    });
   } catch (error) {
     console.error("❌ Error fetching games:", error);
     res.status(500).json({
@@ -60,13 +61,11 @@ exports.getGames = async (req, res) => {
   }
 };
 
-// ✅ FIXED: Improved getMyTeams with better debugging and consistent response
 exports.getMyTeams = async (req, res) => {
   try {
     console.log("🔍 [TEAMS] getMyTeams called");
     console.log("🔍 [TEAMS] req.user:", req.user);
     
-    // ✅ FIX: Get user ID from multiple possible properties
     const userId = req.user.userId || req.user.id;
     
     if (!userId) {
@@ -79,7 +78,6 @@ exports.getMyTeams = async (req, res) => {
     
     console.log("✅ [TEAMS] Resolved userId:", userId);
     
-    // ✅ Find teams where user is EITHER owner OR member
     const teams = await Team.find({
       $or: [
         { owner: userId },
@@ -92,18 +90,7 @@ exports.getMyTeams = async (req, res) => {
       .sort({ createdAt: -1 });
 
     console.log("✅ [TEAMS] Found teams:", teams.length);
-    console.log("🔍 [TEAMS] Team details:", teams.map(t => ({
-      id: t._id,
-      name: t.name,
-      owner: t.owner?._id || t.owner,
-      memberCount: t.members?.length,
-      members: t.members?.map(m => ({
-        userId: m.user?._id || m.user,
-        role: m.role
-      }))
-    })));
     
-    // ✅ Return in standardized format
     res.status(200).json({
       success: true,
       data: teams,
@@ -245,7 +232,6 @@ exports.joinTeamByCode = async (req, res) => {
   }
 };
 
-// ✅ FIXED: Now includes availableRanks in response
 exports.getTeamById = async (req, res) => {
   try {
     const teamId = req.params.id;
@@ -263,13 +249,11 @@ exports.getTeamById = async (req, res) => {
       });
     }
 
-    // Get available ranks from the game
     const gameDoc = await Game.findById(team.game._id || team.game);
     const availableRanks = gameDoc ? gameDoc.ranks : [];
 
     console.log("✅ [GET-TEAM] Team found:", team.name, "Ranks:", availableRanks.length);
 
-    // Return team with availableRanks
     const teamResponse = {
       ...team.toObject(),
       availableRanks

@@ -30,10 +30,20 @@ const ScrimRequests = () => {
       try {
         console.log("🔍 [REQUESTS] Fetching scrim details for:", scrimId);
         
-        // GET /api/scrims/:scrimId
-        const scrim = await api.get(`/api/scrims/${scrimId}`);
+        const response = await api.get(`/api/scrims/${scrimId}`);
+        console.log("🔍 [REQUESTS] Full API response:", response);
 
-        console.log("🔍 [REQUESTS] Fetched scrim data:", scrim);
+        // Handle different response formats
+        let scrim;
+        if (response && response.success && response.data) {
+          scrim = response.data;
+        } else if (response && response._id) {
+          scrim = response;
+        } else {
+          throw new Error("Invalid response format");
+        }
+
+        console.log("🔍 [REQUESTS] Parsed scrim data:", scrim);
 
         // Map populated scrim.requests (Team docs) into UI rows
         const mapped = (scrim.requests || []).map((team) => ({
@@ -70,7 +80,6 @@ const ScrimRequests = () => {
     
     setActionLoading((prev) => ({ ...prev, [teamId]: true }));
     try {
-      // PUT /api/scrims/accept/:scrimId or /api/scrims/decline/:scrimId
       const response = await api.put(`/api/scrims/${action}/${scrimId}`, { teamId });
       
       console.log(`✅ [REQUESTS] ${action} response:`, response);
@@ -78,63 +87,57 @@ const ScrimRequests = () => {
       // Remove the request from the list
       setRequests((prev) => prev.filter((r) => r.id !== teamId));
       
-      // ✅ FIX: Better handling of chat navigation for accept action
       if (action === 'accept') {
         console.log("🔍 [REQUESTS] Accept successful, processing navigation...");
         
-        // Get chatId from response (check multiple possible locations)
-        const chatId = response.chatId || response.data?.chatId;
+        // Handle different response formats for chatId
+        let chatId = null;
+        if (response && response.success && response.chatId) {
+          chatId = response.chatId;
+        } else if (response && response.data && response.data.chatId) {
+          chatId = response.data.chatId;
+        } else if (response && response.chatId) {
+          chatId = response.chatId;
+        }
         
         if (chatId) {
           console.log("✅ [REQUESTS] Found chatId:", chatId);
-          console.log("✅ [REQUESTS] Navigating to chat:", `/chats/${chatId}`);
-          
-          // Wait longer to ensure backend operations complete
+          // Navigate to chat after a short delay to ensure backend operations complete
           setTimeout(() => {
             navigate(`/chats/${chatId}`, { replace: true });
-          }, 1000);
+          }, 500);
         } else {
           console.warn("⚠️ [REQUESTS] No chatId in response, trying fallback...");
           
-          // Fallback: Try to fetch the chat manually
+          // Fallback: Try to fetch the chat manually after a delay
           setTimeout(async () => {
             try {
-              console.log("🔍 [REQUESTS] Attempting to fetch chats...");
-              const chatsResponse = await api.get('/api/chats');
-              console.log("🔍 [REQUESTS] Chats response:", chatsResponse);
+              console.log("🔍 [REQUESTS] Attempting to fetch chat by scrimId...");
+              const chatResponse = await api.get(`/api/chats/scrim/${scrimId}`);
+              console.log("🔍 [REQUESTS] Chat fetch response:", chatResponse);
               
-              // Handle different response formats
-              let chatsArray = [];
-              if (chatsResponse && chatsResponse.success && Array.isArray(chatsResponse.data)) {
-                chatsArray = chatsResponse.data;
-              } else if (Array.isArray(chatsResponse)) {
-                chatsArray = chatsResponse;
-              } else if (chatsResponse && Array.isArray(chatsResponse.data)) {
-                chatsArray = chatsResponse.data;
+              let fetchedChat = null;
+              if (chatResponse && chatResponse.success && chatResponse.data) {
+                fetchedChat = chatResponse.data;
+              } else if (chatResponse && chatResponse._id) {
+                fetchedChat = chatResponse;
               }
               
-              // Find the chat for this scrim
-              const scrimChat = chatsArray.find(
-                chat => chat.type === 'scrim' && chat.metadata?.scrimId === scrimId
-              );
-              
-              if (scrimChat) {
-                console.log("✅ [REQUESTS] Found chat via fallback:", scrimChat._id);
-                navigate(`/chats/${scrimChat._id}`, { replace: true });
+              if (fetchedChat && fetchedChat._id) {
+                console.log("✅ [REQUESTS] Found chat via fallback:", fetchedChat._id);
+                navigate(`/chats/${fetchedChat._id}`, { replace: true });
               } else {
-                console.warn("⚠️ [REQUESTS] Chat not found in fallback");
-                alert("Scrim accepted successfully! The chat should appear shortly. Please check your chats page.");
-                navigate('/chats');
+                throw new Error("Chat not found in fallback");
               }
             } catch (fallbackErr) {
               console.error("❌ [REQUESTS] Fallback chat fetch failed:", fallbackErr);
               alert("Scrim accepted successfully! Please check your chats page.");
               navigate('/chats');
             }
-          }, 1500);
+          }, 1000);
         }
       } else {
-        // For decline action, show success message
+        // For decline action, show success
         console.log("✅ [REQUESTS] Decline successful");
       }
     } catch (err) {

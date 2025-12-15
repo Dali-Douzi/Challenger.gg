@@ -21,9 +21,10 @@ const checkTeamPermission = (team, userId) => {
   return { isOwner, isManager, hasPermission: isOwner || isManager };
 };
 
-// Controller Methods
+// LIST SCRIMS - Fixed with safety checks
 exports.listScrims = async (req, res) => {
   try {
+    console.log("🔥🔥🔥 NEW LISTSCRIMS CODE IS RUNNING! 🔥🔥🔥");
     const { game, server, rank, status } = req.query;
 
     const filter = {};
@@ -55,8 +56,22 @@ exports.listScrims = async (req, res) => {
       .populate("requests", "name logo")
       .sort({ createdAt: -1 });
 
+    // ✅ FIX: Safety check
+    if (!scrims || !Array.isArray(scrims)) {
+      console.error("❌ Scrims is not an array:", scrims);
+      return res.json({
+        success: true,
+        data: [],
+        count: 0,
+      });
+    }
+
+    console.log(`Found ${scrims.length} scrims after query`);
+
     if (server || rank) {
       scrims = scrims.filter((scrim) => {
+        if (!scrim) return false;
+        
         let matchesServer = true;
         let matchesRank = true;
 
@@ -76,7 +91,7 @@ exports.listScrims = async (req, res) => {
       });
     }
 
-    console.log(`Found ${scrims.length} scrims after filtering`);
+    console.log(`Returning ${scrims.length} scrims after filtering`);
 
     res.json({
       success: true,
@@ -130,9 +145,7 @@ exports.createScrim = async (req, res) => {
       if (mongoose.Types.ObjectId.isValid(team.game)) {
         gameDoc = await Game.findById(team.game).select("formats name");
       } else {
-        gameDoc = await Game.findOne({ name: team.game }).select(
-          "formats name"
-        );
+        gameDoc = await Game.findOne({ name: team.game }).select("formats name");
       }
     }
 
@@ -146,9 +159,7 @@ exports.createScrim = async (req, res) => {
     if (!gameDoc.formats.includes(format)) {
       return res.status(400).json({
         success: false,
-        message: `Invalid format for ${
-          gameDoc.name
-        }. Available formats: ${gameDoc.formats.join(", ")}`,
+        message: `Invalid format for ${gameDoc.name}. Available formats: ${gameDoc.formats.join(", ")}`,
       });
     }
 
@@ -172,7 +183,6 @@ exports.createScrim = async (req, res) => {
       .populate("teamA", "name logo game rank server")
       .populate("game", "name");
 
-    // ✅ Emit scrim created event
     eventService.emit("scrim:created", {
       scrimId: scrim._id,
       teamA: team._id,
@@ -238,10 +248,7 @@ exports.requestScrim = async (req, res) => {
       });
     }
 
-    const { hasPermission } = checkTeamPermission(
-      requestingTeam,
-      req.user.userId
-    );
+    const { hasPermission } = checkTeamPermission(requestingTeam, req.user.userId);
     if (!hasPermission) {
       return res.status(403).json({
         success: false,
@@ -266,7 +273,6 @@ exports.requestScrim = async (req, res) => {
     scrim.requests.push(teamId);
     await scrim.save();
 
-    // ✅ Emit event for chat creation (ChatService will handle)
     eventService.emitScrimRequestCreated({
       scrimId: scrim._id,
       teamA: scrim.teamA._id,
@@ -274,7 +280,6 @@ exports.requestScrim = async (req, res) => {
       game: scrim.game._id,
     });
 
-    // Create notification for the host team
     let chat = await Chat.findOne({
       type: "scrim",
       "metadata.scrimId": scrim._id,
@@ -289,7 +294,6 @@ exports.requestScrim = async (req, res) => {
       url: `/scrims/${scrim._id}/requests`,
     });
 
-    // Emit Socket.IO notification to team room
     const io = req.app.get("io");
     if (io) {
       const teamRoom = `team:${scrim.teamA._id}`;
@@ -297,7 +301,6 @@ exports.requestScrim = async (req, res) => {
         teamId: scrim.teamA._id,
         notification: notification,
       });
-      console.log(`📬 Emitted scrim request notification to ${teamRoom}`);
     }
 
     const updatedScrim = await Scrim.findById(scrim._id)
@@ -372,10 +375,7 @@ exports.updateScrim = async (req, res) => {
 
     validateObjectId(scrimId, "scrim ID");
 
-    const scrim = await Scrim.findById(scrimId).populate(
-      "game",
-      "formats name"
-    );
+    const scrim = await Scrim.findById(scrimId).populate("game", "formats name");
     if (!scrim) {
       return res.status(404).json({
         success: false,
@@ -410,9 +410,7 @@ exports.updateScrim = async (req, res) => {
       if (!scrim.game.formats.includes(format)) {
         return res.status(400).json({
           success: false,
-          message: `Invalid format for ${
-            scrim.game.name
-          }. Available formats: ${scrim.game.formats.join(", ")}`,
+          message: `Invalid format for ${scrim.game.name}. Available formats: ${scrim.game.formats.join(", ")}`,
         });
       }
       scrim.format = format;
@@ -436,7 +434,6 @@ exports.updateScrim = async (req, res) => {
       .populate("game", "name")
       .populate("requests", "name logo");
 
-    // ✅ Emit scrim updated event
     eventService.emit("scrim:updated", {
       scrimId: scrim._id,
       teamA: scrim.teamA,
@@ -491,18 +488,13 @@ exports.deleteScrim = async (req, res) => {
       });
     }
 
-    console.log(`Starting cascade delete for scrim ${scrimId}`);
-
-    // Find and delete associated chat
     const chat = await Chat.findOne({
       type: "scrim",
       "metadata.scrimId": scrimId,
     });
+    
     if (chat) {
-      console.log(`Deleting chat ${chat._id} for scrim ${scrimId}`);
       await Chat.findByIdAndDelete(chat._id);
-
-      // Notify chat participants
       const io = req.app.get("io");
       if (io) {
         io.to(chat._id.toString()).emit("chatDeleted", {
@@ -511,19 +503,12 @@ exports.deleteScrim = async (req, res) => {
       }
     }
 
-    // Delete associated notifications
     const deletedNotifications = await Notification.deleteMany({
       scrim: scrimId,
     });
-    console.log(
-      `Deleted ${deletedNotifications.deletedCount} notifications for scrim ${scrimId}`
-    );
 
-    // Delete the scrim
     await Scrim.findByIdAndDelete(scrimId);
-    console.log(`Deleted scrim ${scrimId}`);
 
-    // ✅ Emit scrim cancelled event
     eventService.emitScrimCancelled({
       scrimId: scrimId,
       teamA: scrim.teamA,
@@ -531,14 +516,11 @@ exports.deleteScrim = async (req, res) => {
       deletedBy: req.user.userId,
     });
 
-    // Emit Socket.IO events to all affected teams
     const io = req.app.get("io");
     if (io) {
       const allTeams = [
         scrim.teamA.toString(),
-        ...(Array.isArray(scrim.requests)
-          ? scrim.requests.map((id) => id.toString())
-          : []),
+        ...(Array.isArray(scrim.requests) ? scrim.requests.map((id) => id.toString()) : []),
         ...(scrim.teamB ? [scrim.teamB.toString()] : []),
       ];
 
@@ -635,7 +617,6 @@ exports.acceptScrim = async (req, res) => {
     scrim.requests = [];
     await scrim.save();
 
-    // ✅ Emit event for chat service (ensure chat exists)
     eventService.emitScrimAccepted({
       scrimId: scrim._id,
       teamA: scrim.teamA,
@@ -643,14 +624,12 @@ exports.acceptScrim = async (req, res) => {
       game: scrim.game._id,
     });
 
-    // Get chat (should exist from request, but handle edge case)
     let chat = await Chat.findOne({
       type: "scrim",
       "metadata.scrimId": scrim._id,
     });
 
     if (!chat) {
-      console.log(`Chat not found for scrim ${scrim._id}, triggering creation event`);
       eventService.emitScrimRequestCreated({
         scrimId: scrim._id,
         teamA: scrim.teamA,
@@ -658,7 +637,6 @@ exports.acceptScrim = async (req, res) => {
         game: scrim.game._id,
       });
       
-      // Wait a moment for chat to be created
       await new Promise(resolve => setTimeout(resolve, 1000));
       chat = await Chat.findOne({
         type: "scrim",
@@ -666,7 +644,8 @@ exports.acceptScrim = async (req, res) => {
       });
     }
 
-    // Create notifications for both teams
+    const chatId = chat ? chat._id.toString() : null;
+
     const [acceptNotification, feedbackNotification] = await Promise.all([
       Notification.create({
         team: teamId,
@@ -674,7 +653,7 @@ exports.acceptScrim = async (req, res) => {
         chat: chat ? chat._id : null,
         message: `${postingTeam.name} accepted your scrim request`,
         type: "accept",
-        url: `/chats/${chat?._id || ''}`,
+        url: `/chats/${chatId || ''}`,
       }),
       Notification.create({
         team: scrim.teamA,
@@ -682,11 +661,10 @@ exports.acceptScrim = async (req, res) => {
         chat: chat ? chat._id : null,
         message: `You accepted ${requestingTeam.name}'s request`,
         type: "accept-feedback",
-        url: `/chats/${chat?._id || ''}`,
+        url: `/chats/${chatId || ''}`,
       }),
     ]);
 
-    // Emit Socket.IO notifications to team rooms
     const io = req.app.get("io");
     if (io) {
       io.to(`team:${teamId}`).emit("newNotification", {
@@ -697,9 +675,6 @@ exports.acceptScrim = async (req, res) => {
         teamId: scrim.teamA,
         notification: feedbackNotification,
       });
-      console.log(
-        `✅ Emitted accept notifications to teams ${teamId} and ${scrim.teamA}`
-      );
     }
 
     const updatedScrim = await Scrim.findById(scrim._id)
@@ -711,7 +686,7 @@ exports.acceptScrim = async (req, res) => {
       success: true,
       message: "Scrim request accepted successfully",
       data: updatedScrim,
-      chatId: chat ? chat._id : null, // ✅ FIX: Return chatId for frontend navigation
+      chatId: chatId, // ✅ FIXED - returns chatId
     });
   } catch (error) {
     console.error("Scrim-accept Error:", error);
@@ -778,7 +753,6 @@ exports.declineScrim = async (req, res) => {
     scrim.requests = scrim.requests.filter((id) => id.toString() !== teamId);
     await scrim.save();
 
-    // ✅ Emit scrim declined event
     eventService.emit("scrim:declined", {
       scrimId: scrim._id,
       teamA: scrim.teamA,
@@ -786,13 +760,11 @@ exports.declineScrim = async (req, res) => {
       declinedBy: req.user.userId,
     });
 
-    // Get chat
     let chat = await Chat.findOne({
       type: "scrim",
       "metadata.scrimId": scrim._id,
     });
 
-    // Create decline notification
     const notification = await Notification.create({
       team: teamId,
       scrim: scrim._id,
@@ -802,14 +774,12 @@ exports.declineScrim = async (req, res) => {
       url: "/scrims",
     });
 
-    // Emit Socket.IO notification to team room
     const io = req.app.get("io");
     if (io) {
       io.to(`team:${teamId}`).emit("newNotification", {
         teamId: teamId,
         notification: notification,
       });
-      console.log(`📬 Emitted decline notification to team:${teamId}`);
     }
 
     const updatedScrim = await Scrim.findById(scrim._id)
@@ -835,10 +805,6 @@ exports.declineScrim = async (req, res) => {
   }
 };
 
-/**
- * Mark scrim as completed
- * @route PUT /api/scrims/:scrimId/complete
- */
 exports.completeScrim = async (req, res) => {
   try {
     const { scrimId } = req.params;
@@ -864,7 +830,6 @@ exports.completeScrim = async (req, res) => {
       });
     }
 
-    // Verify user has permission (either team owner/manager)
     const [teamA, teamB] = await Promise.all([
       Team.findById(scrim.teamA._id),
       Team.findById(scrim.teamB._id),
@@ -880,13 +845,11 @@ exports.completeScrim = async (req, res) => {
       });
     }
 
-    // Update scrim
     scrim.status = "completed";
     if (winner) scrim.winner = winner;
     if (score) scrim.score = score;
     await scrim.save();
 
-    // ✅ Emit scrim completed event
     eventService.emitScrimCompleted({
       scrimId: scrim._id,
       teamA: scrim.teamA._id,

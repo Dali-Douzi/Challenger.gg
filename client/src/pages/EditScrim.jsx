@@ -10,6 +10,7 @@ import {
   Button,
   CircularProgress,
   Paper,
+  Alert,
 } from "@mui/material";
 import api from '../services/apiClient';
 
@@ -19,6 +20,7 @@ export default function EditScrim() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
 
   const [formats, setFormats] = useState([]);
   const [format, setFormat] = useState("");
@@ -58,9 +60,16 @@ export default function EditScrim() {
     const loadScrim = async () => {
       try {
         setLoading(true);
+        setError(null);
         
-        const scrimData = await api.get(`/api/scrims/${scrimId}`);
-        const scrim = scrimData.success ? scrimData.data : scrimData;
+        const scrimResponse = await api.get(`/api/scrims/${scrimId}`);
+        
+        // Handle different response formats
+        const scrim = scrimResponse.success ? scrimResponse.data : scrimResponse;
+
+        if (!scrim) {
+          throw new Error("Scrim not found");
+        }
 
         const dt = new Date(scrim.scheduledTime);
         const isoDate = dt.toISOString().slice(0, 10);
@@ -76,19 +85,23 @@ export default function EditScrim() {
         if (!times.includes(isoTime)) times.unshift(isoTime);
         setTimeOptions(times);
 
-        const teamData = await api.get(`/api/teams/${scrim.teamA._id || scrim.teamA}`);
-        const team = teamData.success ? teamData.data : teamData;
+        const teamId = scrim.teamA._id || scrim.teamA;
+        const teamResponse = await api.get(`/api/teams/${teamId}`);
+        const team = teamResponse.success ? teamResponse.data : teamResponse;
 
-        const gamesData = await api.get('/api/teams/games');
-        const games = gamesData.success ? gamesData.data : (Array.isArray(gamesData) ? gamesData : []);
+        if (!team) {
+          throw new Error("Team not found");
+        }
+
+        const gamesResponse = await api.get('/api/teams/games');
+        const games = gamesResponse.success ? gamesResponse.data : (Array.isArray(gamesResponse) ? gamesResponse : []);
         
         const gameDoc = games.find((g) => g._id === (team.game?._id || team.game) || g.name === team.game) || {};
         setFormats(gameDoc.formats || []);
         setFormat(scrim.format);
       } catch (err) {
-        console.error(err);
-        alert(err.message);
-        navigate("/scrims");
+        console.error("Load scrim error:", err);
+        setError(err.response?.data?.message || err.message || "Failed to load scrim");
       } finally {
         setLoading(false);
       }
@@ -99,6 +112,8 @@ export default function EditScrim() {
 
   const handleSave = async () => {
     setSaving(true);
+    setError(null);
+    
     try {
       let dt = new Date();
       if (date === "Tomorrow") dt.setDate(dt.getDate() + 1);
@@ -106,15 +121,21 @@ export default function EditScrim() {
       const [h, m] = time.split(":").map(Number);
       dt.setHours(h, m, 0, 0);
 
-      await api.put(`/api/scrims/${scrimId}`, {
+      const response = await api.put(`/api/scrims/${scrimId}`, {
         format,
         scheduledTime: dt.toISOString(),
       });
 
-      navigate("/scrims");
+      // Check if the response indicates success
+      if (response && (response.success || response.data)) {
+        // Navigate back to scrims on success
+        navigate("/scrims");
+      } else {
+        throw new Error("Update failed");
+      }
     } catch (err) {
-      console.error(err);
-      alert(err.message);
+      console.error("Save error:", err);
+      setError(err.response?.data?.message || err.message || "Failed to save changes");
     } finally {
       setSaving(false);
     }
@@ -124,13 +145,23 @@ export default function EditScrim() {
     if (!window.confirm("Are you sure you want to delete this scrim?")) {
       return;
     }
+    
     setSaving(true);
+    setError(null);
+    
     try {
-      await api.delete(`/api/scrims/${scrimId}`);
-      navigate("/scrims");
+      const response = await api.delete(`/api/scrims/${scrimId}`);
+      
+      // Check if the response indicates success
+      if (response && (response.success || response.data)) {
+        // Navigate back to scrims on success
+        navigate("/scrims");
+      } else {
+        throw new Error("Delete failed");
+      }
     } catch (err) {
-      console.error("Delete Error:", err);
-      alert(err.message);
+      console.error("Delete error:", err);
+      setError(err.response?.data?.message || err.message || "Failed to delete scrim");
     } finally {
       setSaving(false);
     }
@@ -140,6 +171,7 @@ export default function EditScrim() {
     return (
       <Box sx={{ p: 4, textAlign: "center" }}>
         <CircularProgress />
+        <Typography sx={{ mt: 2 }}>Loading scrim...</Typography>
       </Box>
     );
   }
@@ -149,6 +181,12 @@ export default function EditScrim() {
       <Typography variant="h5" gutterBottom>
         Edit Scrim
       </Typography>
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
 
       <FormControl fullWidth sx={{ mb: 2 }}>
         <InputLabel id="format-label">Format</InputLabel>
@@ -198,7 +236,12 @@ export default function EditScrim() {
         </Select>
       </FormControl>
 
-      <Button variant="contained" onClick={handleSave} disabled={saving}>
+      <Button 
+        variant="contained" 
+        onClick={handleSave} 
+        disabled={saving}
+        sx={{ mr: 2 }}
+      >
         {saving ? "Saving…" : "Save Changes"}
       </Button>
       <Button
@@ -206,7 +249,6 @@ export default function EditScrim() {
         color="error"
         onClick={handleDelete}
         disabled={saving}
-        sx={{ ml: 2 }}
       >
         Delete Scrim
       </Button>

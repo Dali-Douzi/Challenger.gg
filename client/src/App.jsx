@@ -29,6 +29,8 @@ import TeamProfile from "./pages/TeamProfile";
 
 // Scrim pages
 import ScrimDashboard from "./pages/ScrimDashboard";
+import ScrimRequests from "./pages/ScrimRequests";
+import EditScrim from "./pages/EditScrim";
 
 // Tournament pages
 import TournamentDashboard from "./pages/TournamentDashboard";
@@ -100,6 +102,7 @@ const App = () => {
                     <Box sx={{ flex: 1 }}>
                       <Dashboard />
                     </Box>
+                    <Footer />
                   </ProtectedRoute>
                 }
               />
@@ -112,6 +115,7 @@ const App = () => {
                     <Box sx={{ flex: 1 }}>
                       <Profile />
                     </Box>
+                    <Footer />
                   </ProtectedRoute>
                 }
               />
@@ -125,6 +129,7 @@ const App = () => {
                     <Box sx={{ flex: 1 }}>
                       <TeamDashboard />
                     </Box>
+                    <Footer />
                   </ProtectedRoute>
                 }
               />
@@ -137,6 +142,7 @@ const App = () => {
                     <Box sx={{ flex: 1 }}>
                       <CreateTeam />
                     </Box>
+                    <Footer />
                   </ProtectedRoute>
                 }
               />
@@ -149,6 +155,7 @@ const App = () => {
                     <Box sx={{ flex: 1 }}>
                       <TeamProfile />
                     </Box>
+                    <Footer />
                   </ProtectedRoute>
                 }
               />
@@ -162,6 +169,33 @@ const App = () => {
                     <Box sx={{ flex: 1 }}>
                       <ScrimDashboard />
                     </Box>
+                    <Footer />
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/scrims/:scrimId/requests"
+                element={
+                  <ProtectedRoute>
+                    <Navbar />
+                    <Box sx={{ flex: 1 }}>
+                      <ScrimRequests />
+                    </Box>
+                    <Footer />
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/scrims/edit"
+                element={
+                  <ProtectedRoute>
+                    <Navbar />
+                    <Box sx={{ flex: 1 }}>
+                      <EditScrim />
+                    </Box>
+                    <Footer />
                   </ProtectedRoute>
                 }
               />
@@ -175,6 +209,7 @@ const App = () => {
                     <Box sx={{ flex: 1 }}>
                       <TournamentDashboard />
                     </Box>
+                    <Footer />
                   </ProtectedRoute>
                 }
               />
@@ -187,6 +222,7 @@ const App = () => {
                     <Box sx={{ flex: 1 }}>
                       <CreateTournamentPage />
                     </Box>
+                    <Footer />
                   </ProtectedRoute>
                 }
               />
@@ -199,6 +235,7 @@ const App = () => {
                     <Box sx={{ flex: 1 }}>
                       <TournamentPage />
                     </Box>
+                    <Footer />
                   </ProtectedRoute>
                 }
               />
@@ -211,6 +248,7 @@ const App = () => {
                     <Box sx={{ flex: 1 }}>
                       <EditTournamentPage />
                     </Box>
+                    <Footer />
                   </ProtectedRoute>
                 }
               />
@@ -223,6 +261,7 @@ const App = () => {
                     <Box sx={{ flex: 1 }}>
                       <BracketPage />
                     </Box>
+                    <Footer />
                   </ProtectedRoute>
                 }
               />

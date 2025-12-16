@@ -175,6 +175,7 @@ const ScrimDashboard = () => {
     }
   }, [loading.games, games]);
 
+  // Separate effect for updating formats when posting team changes
   useEffect(() => {
     if (!selectedTeam || !teams.length || !games.length) return;
 
@@ -190,13 +191,7 @@ const ScrimDashboard = () => {
 
     if (!gameObj) return;
 
-    setSelectedGameFilter(gameObj.name);
-    setServerOptions(gameObj.servers || []);
-    setRankOptions(gameObj.ranks || []);
-    
-    setSelectedServerFilter("");
-    setSelectedRankFilter("");
-
+    // Only update formats for the posting form, don't touch filters
     const fmts = gameObj.formats || [];
     setFormats(fmts);
     if (fmts.length && !format) {
@@ -740,77 +735,79 @@ const ScrimDashboard = () => {
                 </Typography>
               </Box>
 
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6} md={3}>
-                  <FormControl fullWidth>
-                    <InputLabel>Game</InputLabel>
-                    <Select
-                      value={selectedGameFilter}
-                      onChange={(e) => handleGameChange(e.target.value)}
-                      label="Game"
-                    >
-                      {games.map((g) => (
-                        <MenuItem key={g._id} value={g.name}>
-                          {g.name}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </Grid>
+              <Box 
+                sx={{ 
+                  display: "flex", 
+                  gap: 2, 
+                  flexWrap: "wrap",
+                  "& > *": {
+                    flex: "1 1 calc(25% - 16px)",
+                    minWidth: "200px"
+                  }
+                }}
+              >
+                <FormControl sx={{ minWidth: 200 }}>
+                  <InputLabel>Game</InputLabel>
+                  <Select
+                    value={selectedGameFilter}
+                    onChange={(e) => handleGameChange(e.target.value)}
+                    label="Game"
+                  >
+                    {games.map((g) => (
+                      <MenuItem key={g._id} value={g.name}>
+                        {g.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
 
-                <Grid item xs={12} sm={6} md={2}>
-                  <FormControl fullWidth>
-                    <InputLabel>Server</InputLabel>
-                    <Select
-                      value={selectedServerFilter}
-                      onChange={(e) => setSelectedServerFilter(e.target.value)}
-                      label="Server"
-                    >
-                      <MenuItem value="">All</MenuItem>
-                      {serverOptions.map((s) => (
-                        <MenuItem key={s} value={s}>
-                          {s}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </Grid>
+                <FormControl sx={{ minWidth: 200 }}>
+                  <InputLabel>Server</InputLabel>
+                  <Select
+                    value={selectedServerFilter}
+                    onChange={(e) => setSelectedServerFilter(e.target.value)}
+                    label="Server"
+                  >
+                    <MenuItem value="">All</MenuItem>
+                    {serverOptions.map((s) => (
+                      <MenuItem key={s} value={s}>
+                        {s}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
 
-                <Grid item xs={12} sm={6} md={2}>
-                  <FormControl fullWidth>
-                    <InputLabel>Rank</InputLabel>
-                    <Select
-                      value={selectedRankFilter}
-                      onChange={(e) => setSelectedRankFilter(e.target.value)}
-                      label="Rank"
-                    >
-                      <MenuItem value="">All</MenuItem>
-                      {rankOptions.map((r) => (
-                        <MenuItem key={r} value={r}>
-                          {r}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </Grid>
+                <FormControl sx={{ minWidth: 200 }}>
+                  <InputLabel>Rank</InputLabel>
+                  <Select
+                    value={selectedRankFilter}
+                    onChange={(e) => setSelectedRankFilter(e.target.value)}
+                    label="Rank"
+                  >
+                    <MenuItem value="">All</MenuItem>
+                    {rankOptions.map((r) => (
+                      <MenuItem key={r} value={r}>
+                        {r}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
 
-                <Grid item xs={12} sm={6} md={5}>
-                  <FormControl fullWidth>
-                    <InputLabel>Request Team</InputLabel>
-                    <Select
-                      value={selectedRequestTeam}
-                      onChange={(e) => setSelectedRequestTeam(e.target.value)}
-                      label="Request Team"
-                    >
-                      {teams.map((t) => (
-                        <MenuItem key={t._id} value={t._id}>
-                          {t.name}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </Grid>
-              </Grid>
+                <FormControl sx={{ minWidth: 200 }}>
+                  <InputLabel>Request Team</InputLabel>
+                  <Select
+                    value={selectedRequestTeam}
+                    onChange={(e) => setSelectedRequestTeam(e.target.value)}
+                    label="Request Team"
+                  >
+                    {teams.map((t) => (
+                      <MenuItem key={t._id} value={t._id}>
+                        {t.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Box>
             </Box>
 
             {loading.scrims ? (
@@ -986,19 +983,22 @@ const ScrimDashboard = () => {
                               ) : (
                                 <Button
                                   size="small"
-                                  variant="contained"
+                                  variant="outlined"
                                   onClick={() => handleSendRequest(scrim._id)}
                                   disabled={isRequested || !selectedRequestTeam}
                                   sx={{
-                                    background: `linear-gradient(90deg, ${theme.palette.success.main}, ${theme.palette.primary.main})`,
-                                    fontWeight: 700,
+                                    borderColor: '#FF00FF',
+                                    color: '#FF00FF',
+                                    fontWeight: 600,
                                     whiteSpace: "nowrap",
                                     minWidth: 120,
                                     "&:hover": {
-                                      background: `linear-gradient(90deg, ${theme.palette.success.dark}, ${theme.palette.primary.dark})`,
+                                      borderColor: '#CC00CC',
+                                      bgcolor: 'rgba(255, 0, 255, 0.1)',
                                     },
                                     "&:disabled": {
-                                      background: alpha(theme.palette.text.disabled, 0.3),
+                                      borderColor: alpha(theme.palette.text.disabled, 0.3),
+                                      color: alpha(theme.palette.text.disabled, 0.3),
                                     },
                                   }}
                                 >

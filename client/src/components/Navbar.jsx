@@ -8,7 +8,6 @@ import {
   IconButton,
   Box,
   Avatar,
-  Badge,
   Menu,
   MenuItem,
   ListItemIcon,
@@ -33,22 +32,6 @@ import {
   Close as CloseIcon,
 } from "@mui/icons-material";
 import { useAuth } from "../context/AuthContext";
-
-// Discord SVG Icon Component
-const DiscordIcon = ({ sx = {} }) => (
-  <Box
-    component="svg"
-    viewBox="0 0 24 24"
-    sx={{
-      width: 24,
-      height: 24,
-      fill: "currentColor",
-      ...sx,
-    }}
-  >
-    <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515a.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0a12.64 12.64 0 0 0-.617-1.25a.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057a19.9 19.9 0 0 0 5.993 3.03a.078.078 0 0 0 .084-.028a14.09 14.09 0 0 0 1.226-1.994a.076.076 0 0 0-.041-.106a13.107 13.107 0 0 1-1.872-.892a.077.077 0 0 1-.008-.128a10.2 10.2 0 0 0 .372-.292a.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127a12.299 12.299 0 0 1-1.873.892a.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028a19.839 19.839 0 0 0 6.002-3.03a.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419c0-1.333.956-2.419 2.157-2.419c1.21 0 2.176 1.096 2.157 2.42c0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419c0-1.333.955-2.419 2.157-2.419c1.21 0 2.176 1.096 2.157 2.42c0 1.333-.946 2.418-2.157 2.418z"/>
-  </Box>
-);
 
 const Navbar = () => {
   const navigate = useNavigate();
@@ -91,11 +74,6 @@ const Navbar = () => {
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
-  };
-
-  const handleDiscordClick = () => {
-    // Replace with your Discord server invite link
-    window.open("https://discord.gg/yourserver", "_blank");
   };
 
   const navItems = [
@@ -146,40 +124,71 @@ const Navbar = () => {
       </Box>
       <Divider sx={{ mb: 2 }} />
       <List>
-        {navItems.map((item) => (
-          <ListItemButton
-            key={item.label}
-            onClick={() => handleNavigation(item.path)}
-            selected={isActivePath(item.path)}
-            sx={{
-              mx: 1,
-              mb: 0.5,
-              borderRadius: 2,
-              transition: "all 0.2s ease",
-              "&.Mui-selected": {
-                backgroundColor: "rgba(0, 255, 255, 0.16)",
-                "&:hover": {
-                  backgroundColor: "rgba(0, 255, 255, 0.24)",
-                },
-              },
-            }}
-          >
-            <ListItemIcon sx={{ 
-              color: isActivePath(item.path) ? "primary.main" : "inherit",
-              minWidth: 40,
-            }}>
-              {item.icon}
-            </ListItemIcon>
-            <ListItemText
-              primary={item.label}
+        {navItems.map((item) => {
+          // Define hover colors based on item
+          const getHoverColor = () => {
+            if (item.label === "Teams") return "rgba(0, 255, 255, 0.16)"; // Cyan
+            if (item.label === "Scrims") return "rgba(255, 0, 255, 0.16)"; // Magenta
+            if (item.label === "Tournaments") return "rgba(255, 180, 0, 0.16)"; // Yellow
+            return "rgba(0, 255, 255, 0.16)";
+          };
+
+          const getActiveTextColor = () => {
+            if (item.label === "Teams") return "#00FFFF"; // Cyan
+            if (item.label === "Scrims") return "#FF00FF"; // Magenta
+            if (item.label === "Tournaments") return "#FFB400"; // Yellow
+            return "#00FFFF";
+          };
+
+          return (
+            <ListItemButton
+              key={item.label}
+              onClick={() => handleNavigation(item.path)}
+              selected={isActivePath(item.path)}
               sx={{
-                "& .MuiTypography-root": {
-                  fontWeight: isActivePath(item.path) ? 700 : 500,
+                mx: 1,
+                mb: 0.5,
+                borderRadius: 2,
+                transition: "all 0.2s ease",
+                "&:hover": {
+                  backgroundColor: getHoverColor(),
+                  "& .MuiListItemIcon-root": {
+                    color: getActiveTextColor(),
+                  },
+                  "& .MuiTypography-root": {
+                    color: getActiveTextColor(),
+                  },
+                },
+                "&.Mui-selected": {
+                  backgroundColor: "rgba(0, 255, 255, 0.16)",
+                  "& .MuiListItemIcon-root": {
+                    color: getActiveTextColor(),
+                  },
+                  "& .MuiTypography-root": {
+                    color: getActiveTextColor(),
+                  },
+                  "&:hover": {
+                    backgroundColor: "rgba(0, 255, 255, 0.24)",
+                  },
                 },
               }}
-            />
-          </ListItemButton>
-        ))}
+            >
+              <ListItemIcon sx={{ 
+                minWidth: 40,
+              }}>
+                {item.icon}
+              </ListItemIcon>
+              <ListItemText
+                primary={item.label}
+                sx={{
+                  "& .MuiTypography-root": {
+                    fontWeight: isActivePath(item.path) ? 700 : 500,
+                  },
+                }}
+              />
+            </ListItemButton>
+          );
+        })}
       </List>
     </Box>
   );
@@ -190,9 +199,13 @@ const Navbar = () => {
         position="sticky" 
         elevation={0}
         sx={{
-          backdropFilter: "blur(10px)",
-          backgroundColor: "rgba(18, 18, 18, 0.9)",
-          borderBottom: "1px solid rgba(255, 255, 255, 0.1)",
+          backdropFilter: "blur(16px)",
+          backgroundColor: "rgba(18, 18, 18, 0.95)",
+          borderBottom: "2px solid transparent",
+          backgroundImage: "linear-gradient(rgba(18, 18, 18, 0.95), rgba(18, 18, 18, 0.95)), linear-gradient(90deg, rgba(0, 255, 255, 0.3), rgba(255, 0, 255, 0.3))",
+          backgroundOrigin: "border-box",
+          backgroundClip: "padding-box, border-box",
+          boxShadow: "0 4px 24px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 255, 255, 0.1)",
         }}
       >
         <Toolbar sx={{ justifyContent: "space-between", minHeight: { xs: 64, sm: 70 }, px: { xs: 2, sm: 3 } }}>
@@ -235,6 +248,7 @@ const Navbar = () => {
                   WebkitTextFillColor: "transparent",
                   letterSpacing: "-0.02em",
                   fontSize: { xs: "1.3rem", sm: "1.5rem" },
+                  filter: "drop-shadow(0 0 8px rgba(0, 255, 255, 0.3))",
                 }}
               >
                 CHALLENGER
@@ -245,34 +259,61 @@ const Navbar = () => {
           {/* Center Section - Navigation Items (Desktop Only) */}
           {!isMobile && (
             <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
-              {navItems.map((item) => (
-                <Button
-                  key={item.label}
-                  color="inherit"
-                  onClick={() => navigate(item.path)}
-                  startIcon={item.icon}
-                  sx={{
-                    fontWeight: isActivePath(item.path) ? 700 : 500,
-                    backgroundColor: isActivePath(item.path)
-                      ? "rgba(0, 255, 255, 0.16)"
-                      : "transparent",
-                    color: isActivePath(item.path) ? "primary.main" : "inherit",
-                    "&:hover": {
-                      backgroundColor: isActivePath(item.path) 
-                        ? "rgba(0, 255, 255, 0.24)"
-                        : "rgba(255, 255, 255, 0.08)",
-                    },
-                    borderRadius: 2,
-                    px: 2.5,
-                    py: 1,
-                    transition: "all 0.2s ease",
-                    textTransform: "none",
-                    fontSize: "0.95rem",
-                  }}
-                >
-                  {item.label}
-                </Button>
-              ))}
+              {navItems.map((item) => {
+                // Define hover colors based on button
+                const getHoverColor = () => {
+                  if (item.label === "Teams") return "rgba(0, 255, 255, 0.15)"; // Cyan
+                  if (item.label === "Scrims") return "rgba(255, 0, 255, 0.15)"; // Magenta
+                  if (item.label === "Tournaments") return "rgba(255, 180, 0, 0.15)"; // Yellow
+                  return "rgba(255, 255, 255, 0.08)";
+                };
+                
+                const getHoverBorderColor = () => {
+                  if (item.label === "Teams") return "rgba(0, 255, 255, 0.5)"; // Cyan
+                  if (item.label === "Scrims") return "rgba(255, 0, 255, 0.5)"; // Magenta
+                  if (item.label === "Tournaments") return "rgba(255, 180, 0, 0.5)"; // Yellow
+                  return "rgba(255, 255, 255, 0.1)";
+                };
+
+                const getActiveTextColor = () => {
+                  if (item.label === "Teams") return "#00FFFF"; // Cyan
+                  if (item.label === "Scrims") return "#FF00FF"; // Magenta
+                  if (item.label === "Tournaments") return "#FFB400"; // Yellow
+                  return "#00FFFF";
+                };
+
+                return (
+                  <Button
+                    key={item.label}
+                    color="inherit"
+                    onClick={() => navigate(item.path)}
+                    startIcon={item.icon}
+                    sx={{
+                      fontWeight: isActivePath(item.path) ? 700 : 500,
+                      backgroundColor: isActivePath(item.path)
+                        ? "rgba(0, 255, 255, 0.16)"
+                        : "transparent",
+                      color: isActivePath(item.path) ? getActiveTextColor() : "inherit",
+                      border: isActivePath(item.path) 
+                        ? "1px solid rgba(0, 255, 255, 0.3)"
+                        : "1px solid transparent",
+                      "&:hover": {
+                        backgroundColor: getHoverColor(),
+                        borderColor: getHoverBorderColor(),
+                        color: getActiveTextColor(),
+                      },
+                      borderRadius: 2,
+                      px: 2.5,
+                      py: 1,
+                      transition: "all 0.2s ease",
+                      textTransform: "none",
+                      fontSize: "0.95rem",
+                    }}
+                  >
+                    {item.label}
+                  </Button>
+                );
+              })}
             </Box>
           )}
 
@@ -291,18 +332,7 @@ const Navbar = () => {
                   },
                 }}
               >
-                <Badge 
-                  badgeContent={3} 
-                  color="error"
-                  sx={{
-                    "& .MuiBadge-badge": {
-                      fontSize: "0.7rem",
-                      fontWeight: 700,
-                    },
-                  }}
-                >
-                  <Notifications />
-                </Badge>
+                <Notifications />
               </IconButton>
             </Tooltip>
 
@@ -319,18 +349,7 @@ const Navbar = () => {
                   },
                 }}
               >
-                <Badge 
-                  badgeContent={5} 
-                  color="secondary"
-                  sx={{
-                    "& .MuiBadge-badge": {
-                      fontSize: "0.7rem",
-                      fontWeight: 700,
-                    },
-                  }}
-                >
-                  <Message />
-                </Badge>
+                <Message />
               </IconButton>
             </Tooltip>
 
@@ -358,9 +377,15 @@ const Navbar = () => {
                     fontSize: "0.9rem",
                     border: "2px solid",
                     borderColor: user?.discordAvatar ? "#5865F2" : "primary.main",
-                    transition: "transform 0.3s ease",
+                    boxShadow: user?.discordAvatar 
+                      ? "0 0 12px rgba(88, 101, 242, 0.4)"
+                      : "0 0 12px rgba(0, 255, 255, 0.4)",
+                    transition: "all 0.3s ease",
                     "&:hover": {
                       transform: "scale(1.05)",
+                      boxShadow: user?.discordAvatar 
+                        ? "0 0 16px rgba(88, 101, 242, 0.6)"
+                        : "0 0 16px rgba(0, 255, 255, 0.6)",
                     },
                   }}
                 >

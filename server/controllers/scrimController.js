@@ -668,6 +668,10 @@ exports.acceptScrim = async (req, res) => {
     const { teamId } = req.body;
     const userId = req.user.userId || req.user.id;
 
+    console.log("✅ [ACCEPT-SCRIM] Starting acceptance process");
+    console.log("✅ [ACCEPT-SCRIM] Scrim ID:", scrimId);
+    console.log("✅ [ACCEPT-SCRIM] Team ID:", teamId);
+
     if (!teamId) {
       return res.status(400).json({
         success: false,
@@ -720,11 +724,15 @@ exports.acceptScrim = async (req, res) => {
       });
     }
 
+    // Update scrim status FIRST
     scrim.teamB = teamId;
     scrim.status = "booked";
     scrim.requests = [];
     await scrim.save();
 
+    console.log("✅ [ACCEPT-SCRIM] Scrim updated to booked status");
+
+    // Emit event - chatService will create the chat
     eventService.emitScrimAccepted({
       scrimId: scrim._id,
       teamA: scrim.teamA,
@@ -732,28 +740,38 @@ exports.acceptScrim = async (req, res) => {
       game: scrim.game._id,
     });
 
-    let chat = await Chat.findOne({
-      type: "scrim",
-      "metadata.scrimId": scrim._id,
-    });
+    console.log("✅ [ACCEPT-SCRIM] Event emitted, waiting for chat creation");
 
-    if (!chat) {
-      eventService.emitScrimRequestCreated({
-        scrimId: scrim._id,
-        teamA: scrim.teamA,
-        teamB: teamId,
-        game: scrim.game._id,
-      });
-      
-      await new Promise(resolve => setTimeout(resolve, 1000));
+    // Wait for chat to be created with retry logic
+    let chat = null;
+    let attempts = 0;
+    const maxAttempts = 10;
+    const delayMs = 500;
+    
+    while (!chat && attempts < maxAttempts) {
+      await new Promise(resolve => setTimeout(resolve, delayMs));
       chat = await Chat.findOne({
         type: "scrim",
         "metadata.scrimId": scrim._id,
       });
+      attempts++;
+      
+      if (chat) {
+        console.log(`✅ [ACCEPT-SCRIM] Chat found on attempt ${attempts}`);
+      } else {
+        console.log(`⏳ [ACCEPT-SCRIM] Chat not found yet, attempt ${attempts}/${maxAttempts}`);
+      }
+    }
+
+    if (!chat) {
+      console.error(`❌ [ACCEPT-SCRIM] Chat not created after ${maxAttempts} attempts for scrim ${scrim._id}`);
     }
 
     const chatId = chat ? chat._id.toString() : null;
 
+    console.log("✅ [ACCEPT-SCRIM] Creating notifications with chatId:", chatId);
+
+    // Create notifications
     const [acceptNotification, feedbackNotification] = await Promise.all([
       Notification.create({
         team: teamId,
@@ -761,7 +779,7 @@ exports.acceptScrim = async (req, res) => {
         chat: chat ? chat._id : null,
         message: `${postingTeam.name} accepted your scrim request`,
         type: "accept",
-        url: `/chats/${chatId || ''}`,
+        url: chatId ? `/chats/${chatId}` : `/scrims/${scrim._id}`,
       }),
       Notification.create({
         team: scrim.teamA,
@@ -769,10 +787,13 @@ exports.acceptScrim = async (req, res) => {
         chat: chat ? chat._id : null,
         message: `You accepted ${requestingTeam.name}'s request`,
         type: "accept-feedback",
-        url: `/chats/${chatId || ''}`,
+        url: chatId ? `/chats/${chatId}` : `/scrims/${scrim._id}`,
       }),
     ]);
 
+    console.log("✅ [ACCEPT-SCRIM] Notifications created");
+
+    // Emit notifications via Socket.IO
     const io = req.app.get("io");
     if (io) {
       io.to(`team:${teamId}`).emit("newNotification", {
@@ -783,12 +804,16 @@ exports.acceptScrim = async (req, res) => {
         teamId: scrim.teamA,
         notification: feedbackNotification,
       });
+      
+      console.log(`✅ [ACCEPT-SCRIM] Notifications emitted to teams`);
     }
 
     const updatedScrim = await Scrim.findById(scrim._id)
       .populate("teamA", "name logo game rank server")
       .populate("teamB", "name logo game rank server")
       .populate("game", "name");
+
+    console.log("✅ [ACCEPT-SCRIM] Acceptance complete");
 
     res.json({
       success: true,
@@ -797,7 +822,7 @@ exports.acceptScrim = async (req, res) => {
       chatId: chatId,
     });
   } catch (error) {
-    console.error("Scrim-accept Error:", error);
+    console.error("❌ [ACCEPT-SCRIM] Error:", error);
     res.status(500).json({
       success: false,
       message: "Server error while accepting scrim",

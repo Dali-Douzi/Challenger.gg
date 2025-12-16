@@ -1,275 +1,209 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useAuth } from '../context/AuthContext';
-import { useChat as useChatContext } from '../context/ChatContext';
-import useSocket from './useSocket';
-import chatService from '../services/chatService';
+import { getChatByScrimIdWithRetry, sendMessage as sendMessageAPI } from '../services/chatService';
+import { 
+  getSocket, 
+  joinChatRoom, 
+  leaveChatRoom, 
+  sendTypingIndicator,
+  onNewMessage,
+  offNewMessage,
+  onUserTyping,
+  offUserTyping
+} from '../services/socket';
 
 /**
- * useChat Hook
- * Comprehensive hook for chat operations
- * Handles fetching chat, messages, sending, and real-time updates
+ * Custom hook for managing chat functionality
+ * @param {string} scrimId - The scrim ID to load chat for
  */
-export const useChat = (scrimId) => {
-  const { user } = useAuth();
-  const { setChatId, incrementUnread, isChatMinimized } = useChatContext();
-  const { connected, joinChat, leaveChat, setTyping, onMessage, offMessage, onTyping, offTyping } = useSocket();
-
+const useChat = (scrimId) => {
   const [chat, setChat] = useState(null);
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
-  const [hasMore, setHasMore] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [typingUsers, setTypingUsers] = useState([]); // Users currently typing
-
+  const [typingUsers, setTypingUsers] = useState([]);
+  
   const typingTimeoutRef = useRef(null);
-  const isTypingRef = useRef(false);
   const chatIdRef = useRef(null);
 
   /**
-   * Fetch chat by scrim ID with retry logic
+   * Load chat by scrim ID
    */
-  const fetchChat = useCallback(async () => {
-    if (!scrimId) return;
+  const loadChat = useCallback(async () => {
+    if (!scrimId) {
+      setError('No scrim ID provided');
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
 
     try {
-      setLoading(true);
-      setError(null);
-
-      const response = await chatService.getChatByScrimIdWithRetry(scrimId);
-
-      if (response.success && response.data) {
-        setChat(response.data);
-        chatIdRef.current = response.data._id;
+      console.log(`💬 [useChat] Loading chat for scrim: ${scrimId}`);
+      
+      const response = await getChatByScrimIdWithRetry(scrimId, 5, 1000);
+      
+      if (response && response.success && response.data) {
+        const chatData = response.data;
+        setChat(chatData);
+        setMessages(chatData.messages || []);
+        chatIdRef.current = chatData._id;
         
-        // Update chat ID in context
-        setChatId(scrimId, response.data._id);
-
-        // Join chat room via socket
-        if (connected) {
-          joinChat(response.data._id);
+        console.log(`✅ [useChat] Chat loaded: ${chatData._id}, Messages: ${chatData.messages?.length || 0}`);
+        
+        // Join Socket.IO room
+        const socket = getSocket();
+        if (socket && chatData._id) {
+          joinChatRoom(chatData._id);
+          console.log(`✅ [useChat] Joined chat room: ${chatData._id}`);
         }
-
-        return response.data;
+      } else {
+        throw new Error('Invalid chat response');
       }
     } catch (err) {
-      console.error('Error fetching chat:', err);
+      console.error(`❌ [useChat] Error loading chat:`, err);
       setError(err.message || 'Failed to load chat');
     } finally {
       setLoading(false);
     }
-  }, [scrimId, connected, joinChat, setChatId]);
-
-  /**
-   * Fetch messages for the chat
-   */
-  const fetchMessages = useCallback(async (chatId, limit = 50, skip = 0) => {
-    if (!chatId) return;
-
-    try {
-      const response = await chatService.getChatById(chatId, limit, skip);
-
-      if (response.success && response.data) {
-        const formattedMessages = response.data.messages.map(msg =>
-          chatService.formatMessage(msg, user)
-        );
-
-        setMessages(formattedMessages);
-        setHasMore(response.data.pagination?.hasMore || false);
-      }
-    } catch (err) {
-      console.error('Error fetching messages:', err);
-    }
-  }, [user]);
-
-  /**
-   * Load more messages (pagination)
-   */
-  const loadMoreMessages = useCallback(async () => {
-    if (!chat?._id || loadingMore || !hasMore) return;
-
-    try {
-      setLoadingMore(true);
-
-      const response = await chatService.getChatById(
-        chat._id,
-        50,
-        messages.length
-      );
-
-      if (response.success && response.data) {
-        const formattedMessages = response.data.messages.map(msg =>
-          chatService.formatMessage(msg, user)
-        );
-
-        setMessages(prev => [...formattedMessages, ...prev]);
-        setHasMore(response.data.pagination?.hasMore || false);
-      }
-    } catch (err) {
-      console.error('Error loading more messages:', err);
-    } finally {
-      setLoadingMore(false);
-    }
-  }, [chat, messages.length, loadingMore, hasMore, user]);
+  }, [scrimId]);
 
   /**
    * Send a message
    */
   const sendMessage = useCallback(async (text) => {
-    if (!chat?._id || !text.trim() || sending) return;
+    if (!chatIdRef.current || !text.trim()) {
+      console.warn('⚠️ [useChat] Cannot send message: missing chatId or text');
+      return;
+    }
+
+    setSending(true);
 
     try {
-      setSending(true);
-
-      await chatService.sendMessage(chat._id, text.trim());
-
-      // Stop typing indicator
-      if (isTypingRef.current) {
-        setTyping(chat._id, false);
-        isTypingRef.current = false;
+      console.log(`📤 [useChat] Sending message to chat: ${chatIdRef.current}`);
+      
+      const response = await sendMessageAPI(chatIdRef.current, text.trim());
+      
+      if (response && response.success && response.data) {
+        // Update local state with new chat data
+        setChat(response.data);
+        setMessages(response.data.messages || []);
+        console.log(`✅ [useChat] Message sent successfully`);
       }
-
-      // Message will arrive via socket
     } catch (err) {
-      console.error('Error sending message:', err);
+      console.error(`❌ [useChat] Error sending message:`, err);
       throw err;
     } finally {
       setSending(false);
     }
-  }, [chat, sending, setTyping]);
+  }, []);
 
   /**
-   * Handle user typing
+   * Handle typing indicator
    */
   const handleTyping = useCallback(() => {
-    if (!chat?._id || !connected) return;
+    if (!chatIdRef.current) return;
 
-    // Send typing indicator if not already typing
-    if (!isTypingRef.current) {
-      setTyping(chat._id, true);
-      isTypingRef.current = true;
-    }
+    const socket = getSocket();
+    if (!socket) return;
+
+    // Send typing indicator
+    sendTypingIndicator(chatIdRef.current, true);
+    console.log(`⌨️ [useChat] Started typing in chat: ${chatIdRef.current}`);
 
     // Clear existing timeout
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
 
-    // Set timeout to stop typing indicator after 3 seconds
+    // Auto-stop typing after 3 seconds
     typingTimeoutRef.current = setTimeout(() => {
-      setTyping(chat._id, false);
-      isTypingRef.current = false;
+      stopTyping();
     }, 3000);
-  }, [chat, connected, setTyping]);
+  }, []);
 
   /**
    * Stop typing indicator
    */
   const stopTyping = useCallback(() => {
-    if (!chat?._id || !isTypingRef.current) return;
+    if (!chatIdRef.current) return;
 
-    setTyping(chat._id, false);
-    isTypingRef.current = false;
+    const socket = getSocket();
+    if (!socket) return;
+
+    sendTypingIndicator(chatIdRef.current, false);
+    console.log(`⌨️ [useChat] Stopped typing in chat: ${chatIdRef.current}`);
 
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
     }
-  }, [chat, setTyping]);
+  }, []);
 
-  // Fetch chat on mount
+  /**
+   * Handle incoming messages
+   */
   useEffect(() => {
-    if (scrimId) {
-      fetchChat();
-    }
-  }, [scrimId, fetchChat]);
-
-  // Fetch messages when chat is loaded
-  useEffect(() => {
-    if (chat?._id) {
-      fetchMessages(chat._id);
-    }
-  }, [chat?._id, fetchMessages]);
-
-  // Join chat room when socket connects
-  useEffect(() => {
-    if (connected && chat?._id) {
-      joinChat(chat._id);
-    }
-
-    return () => {
-      if (chat?._id) {
-        leaveChat(chat._id);
-      }
-    };
-  }, [connected, chat?._id, joinChat, leaveChat]);
-
-  // Listen for new messages
-  useEffect(() => {
-    if (!connected || !chat?._id) return;
-
     const handleNewMessage = (data) => {
-      if (data.chatId !== chat._id) return;
-
-      const formattedMessage = chatService.formatMessage(data.message, user);
-      setMessages(prev => [...prev, formattedMessage]);
-
-      // Increment unread if chat is minimized
-      if (isChatMinimized(scrimId)) {
-        incrementUnread(scrimId);
+      console.log(`📥 [useChat] New message received:`, data);
+      
+      if (data.chatId === chatIdRef.current) {
+        setMessages(prevMessages => [...prevMessages, data.message]);
       }
     };
 
-    onMessage(handleNewMessage);
+    onNewMessage(handleNewMessage);
 
     return () => {
-      offMessage(handleNewMessage);
+      offNewMessage(handleNewMessage);
     };
-  }, [connected, chat?._id, user, onMessage, offMessage, scrimId, isChatMinimized, incrementUnread]);
+  }, []);
 
-  // Listen for typing indicators
+  /**
+   * Handle typing indicators
+   */
   useEffect(() => {
-    if (!connected || !chat?._id) return;
-
     const handleTyping = (data) => {
-      if (data.userId === user?.id) return; // Ignore own typing
-
-      setTypingUsers(prev => {
-        if (data.isTyping) {
-          // Add user if not already in list
-          if (!prev.find(u => u.userId === data.userId)) {
-            return [...prev, { userId: data.userId, username: data.username }];
-          }
-        } else {
-          // Remove user from typing list
-          return prev.filter(u => u.userId !== data.userId);
-        }
-        return prev;
-      });
-
-      // Auto-remove typing indicator after 5 seconds
+      console.log(`⌨️ [useChat] Typing indicator:`, data);
+      
       if (data.isTyping) {
-        setTimeout(() => {
-          setTypingUsers(prev => prev.filter(u => u.userId !== data.userId));
-        }, 5000);
+        setTypingUsers(prev => {
+          const exists = prev.some(u => u.userId === data.userId);
+          if (exists) return prev;
+          return [...prev, { userId: data.userId, username: data.username }];
+        });
+      } else {
+        setTypingUsers(prev => prev.filter(u => u.userId !== data.userId));
       }
     };
 
-    onTyping(handleTyping);
+    onUserTyping(handleTyping);
 
     return () => {
-      offTyping(handleTyping);
+      offUserTyping(handleTyping);
     };
-  }, [connected, chat?._id, user, onTyping, offTyping]);
+  }, []);
 
-  // Cleanup typing timeout on unmount
+  /**
+   * Load chat on mount
+   */
   useEffect(() => {
+    loadChat();
+
     return () => {
+      // Leave chat room on unmount
+      if (chatIdRef.current) {
+        leaveChatRoom(chatIdRef.current);
+        console.log(`👋 [useChat] Left chat room: ${chatIdRef.current}`);
+      }
+
+      // Clear typing timeout
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
       }
     };
-  }, []);
+  }, [loadChat]);
 
   return {
     chat,
@@ -277,14 +211,11 @@ export const useChat = (scrimId) => {
     loading,
     sending,
     error,
-    hasMore,
-    loadingMore,
     typingUsers,
     sendMessage,
-    loadMoreMessages,
     handleTyping,
     stopTyping,
-    refetchChat: fetchChat,
+    reload: loadChat,
   };
 };
 

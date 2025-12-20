@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Box, Typography } from '@mui/material';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../context/AuthContext';
 import MessageBubble from './MessageBubble';
 
 /**

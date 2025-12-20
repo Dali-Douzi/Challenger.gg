@@ -10,6 +10,7 @@ import { CssBaseline, Box } from "@mui/material";
 import theme from "./styles/theme";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ChatProvider } from "./context/ChatContext";
+import { NotificationProvider } from "./context/NotificationContext";
 import { connectSocket, disconnectSocket } from "./services/socket";
 
 // Import components
@@ -58,14 +59,42 @@ const PublicRoute = ({ children }) => {
  */
 const SocketManager = () => {
   const { user, isAuthenticated } = useAuth();
+  const [teams, setTeams] = React.useState([]);
+
+  // Fetch user's teams for socket room joining
+  useEffect(() => {
+    const fetchTeams = async () => {
+      if (!isAuthenticated || !user) return;
+
+      try {
+        const response = await fetch('/api/teams/my', {
+          credentials: 'include',
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          const teamsArray = data?.data || data || [];
+          setTeams(teamsArray);
+        }
+      } catch (error) {
+        console.error('Failed to fetch teams for socket:', error);
+        setTeams([]);
+      }
+    };
+
+    fetchTeams();
+  }, [isAuthenticated, user]);
 
   useEffect(() => {
-    if (isAuthenticated && user) {
+    if (isAuthenticated && user && teams.length > 0) {
       console.log('🔌 [SocketManager] Connecting socket for user:', user.id || user._id);
+      console.log('👥 [SocketManager] User teams:', teams.length);
       
-      // Get user's teams if available
-      const userTeams = user.teams || [];
-      connectSocket(userTeams);
+      connectSocket(teams);
+    } else if (isAuthenticated && user && teams.length === 0) {
+      // Connect even without teams (user might create teams later)
+      console.log('🔌 [SocketManager] Connecting socket without teams');
+      connectSocket([]);
     } else {
       console.log('🔌 [SocketManager] Disconnecting socket - user not authenticated');
       disconnectSocket();
@@ -74,7 +103,7 @@ const SocketManager = () => {
     return () => {
       disconnectSocket();
     };
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, user, teams]);
 
   return null; // This component doesn't render anything
 };
@@ -87,9 +116,10 @@ const App = () => {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <AuthProvider>
-        <ChatProvider>
-          <SocketManager />
-          <Router>
+        <NotificationProvider>
+          <ChatProvider>
+            <SocketManager />
+            <Router>
             <Box
               sx={{
                 display: "flex",
@@ -364,6 +394,7 @@ const App = () => {
             </Box>
           </Router>
         </ChatProvider>
+        </NotificationProvider>
       </AuthProvider>
     </ThemeProvider>
   );

@@ -19,6 +19,11 @@ import {
   Drawer,
   List,
   ListItemButton,
+  Badge,
+  Popover,
+  Paper,
+  CircularProgress,
+  alpha,
 } from "@mui/material";
 import {
   Notifications,
@@ -30,8 +35,12 @@ import {
   Person,
   Menu as MenuIcon,
   Close as CloseIcon,
+  CheckCircle,
+  Delete,
+  MarkEmailRead,
 } from "@mui/icons-material";
 import { useAuth } from "../context/AuthContext";
+import { useNotifications } from "../context/NotificationContext";
 
 const Navbar = () => {
   const navigate = useNavigate();
@@ -39,9 +48,20 @@ const Navbar = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const { user, logout } = useAuth();
+  const { 
+    notifications, 
+    unreadCount, 
+    loading: notificationsLoading,
+    markAsRead,
+    markAllAsRead,
+    deleteNotification,
+  } = useNotifications();
+
   const [anchorEl, setAnchorEl] = useState(null);
+  const [notifAnchorEl, setNotifAnchorEl] = useState(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const open = Boolean(anchorEl);
+  const notifOpen = Boolean(notifAnchorEl);
 
   const handleLogoClick = () => {
     navigate("/dashboard");
@@ -74,6 +94,39 @@ const Navbar = () => {
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
+  };
+
+  // Notification handlers
+  const handleNotificationClick = (event) => {
+    setNotifAnchorEl(event.currentTarget);
+  };
+
+  const handleNotificationClose = () => {
+    setNotifAnchorEl(null);
+  };
+
+  const handleNotificationItemClick = async (notification) => {
+    // Mark as read if unread
+    if (!notification.read) {
+      await markAsRead(notification._id);
+    }
+
+    // Navigate to the notification's URL
+    if (notification.url) {
+      navigate(notification.url);
+    }
+
+    handleNotificationClose();
+  };
+
+  const handleMarkAllRead = async (e) => {
+    e.stopPropagation();
+    await markAllAsRead();
+  };
+
+  const handleDeleteNotification = async (e, notificationId) => {
+    e.stopPropagation();
+    await deleteNotification(notificationId);
   };
 
   const navItems = [
@@ -125,18 +178,17 @@ const Navbar = () => {
       <Divider sx={{ mb: 2 }} />
       <List>
         {navItems.map((item) => {
-          // Define hover colors based on item
           const getHoverColor = () => {
-            if (item.label === "Teams") return "rgba(0, 255, 255, 0.16)"; // Cyan
-            if (item.label === "Scrims") return "rgba(255, 0, 255, 0.16)"; // Magenta
-            if (item.label === "Tournaments") return "rgba(255, 180, 0, 0.16)"; // Yellow
+            if (item.label === "Teams") return "rgba(0, 255, 255, 0.16)";
+            if (item.label === "Scrims") return "rgba(255, 0, 255, 0.16)";
+            if (item.label === "Tournaments") return "rgba(255, 180, 0, 0.16)";
             return "rgba(0, 255, 255, 0.16)";
           };
 
           const getActiveTextColor = () => {
-            if (item.label === "Teams") return "#00FFFF"; // Cyan
-            if (item.label === "Scrims") return "#FF00FF"; // Magenta
-            if (item.label === "Tournaments") return "#FFB400"; // Yellow
+            if (item.label === "Teams") return "#00FFFF";
+            if (item.label === "Scrims") return "#FF00FF";
+            if (item.label === "Tournaments") return "#FFB400";
             return "#00FFFF";
           };
 
@@ -173,9 +225,7 @@ const Navbar = () => {
                 },
               }}
             >
-              <ListItemIcon sx={{ 
-                minWidth: 40,
-              }}>
+              <ListItemIcon sx={{ minWidth: 40 }}>
                 {item.icon}
               </ListItemIcon>
               <ListItemText
@@ -260,25 +310,24 @@ const Navbar = () => {
           {!isMobile && (
             <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
               {navItems.map((item) => {
-                // Define hover colors based on button
                 const getHoverColor = () => {
-                  if (item.label === "Teams") return "rgba(0, 255, 255, 0.15)"; // Cyan
-                  if (item.label === "Scrims") return "rgba(255, 0, 255, 0.15)"; // Magenta
-                  if (item.label === "Tournaments") return "rgba(255, 180, 0, 0.15)"; // Yellow
+                  if (item.label === "Teams") return "rgba(0, 255, 255, 0.15)";
+                  if (item.label === "Scrims") return "rgba(255, 0, 255, 0.15)";
+                  if (item.label === "Tournaments") return "rgba(255, 180, 0, 0.15)";
                   return "rgba(255, 255, 255, 0.08)";
                 };
                 
                 const getHoverBorderColor = () => {
-                  if (item.label === "Teams") return "rgba(0, 255, 255, 0.5)"; // Cyan
-                  if (item.label === "Scrims") return "rgba(255, 0, 255, 0.5)"; // Magenta
-                  if (item.label === "Tournaments") return "rgba(255, 180, 0, 0.5)"; // Yellow
+                  if (item.label === "Teams") return "rgba(0, 255, 255, 0.5)";
+                  if (item.label === "Scrims") return "rgba(255, 0, 255, 0.5)";
+                  if (item.label === "Tournaments") return "rgba(255, 180, 0, 0.5)";
                   return "rgba(255, 255, 255, 0.1)";
                 };
 
                 const getActiveTextColor = () => {
-                  if (item.label === "Teams") return "#00FFFF"; // Cyan
-                  if (item.label === "Scrims") return "#FF00FF"; // Magenta
-                  if (item.label === "Tournaments") return "#FFB400"; // Yellow
+                  if (item.label === "Teams") return "#00FFFF";
+                  if (item.label === "Scrims") return "#FF00FF";
+                  if (item.label === "Tournaments") return "#FFB400";
                   return "#00FFFF";
                 };
 
@@ -324,6 +373,7 @@ const Navbar = () => {
               <IconButton
                 color="inherit"
                 aria-label="notifications"
+                onClick={handleNotificationClick}
                 sx={{
                   transition: "all 0.2s ease",
                   "&:hover": {
@@ -332,15 +382,18 @@ const Navbar = () => {
                   },
                 }}
               >
-                <Notifications />
+                <Badge badgeContent={unreadCount} color="error">
+                  <Notifications />
+                </Badge>
               </IconButton>
             </Tooltip>
 
-            {/* Messages */}
-            <Tooltip title="Messages">
+            {/* Messages - Placeholder for now */}
+            <Tooltip title="Messages (Coming Soon)">
               <IconButton
                 color="inherit"
                 aria-label="messages"
+                disabled
                 sx={{
                   transition: "all 0.2s ease",
                   "&:hover": {
@@ -506,6 +559,135 @@ const Navbar = () => {
         </Toolbar>
       </AppBar>
 
+      {/* Notification Popover */}
+      <Popover
+        open={notifOpen}
+        anchorEl={notifAnchorEl}
+        onClose={handleNotificationClose}
+        anchorOrigin={{
+          vertical: "bottom",
+          horizontal: "right",
+        }}
+        transformOrigin={{
+          vertical: "top",
+          horizontal: "right",
+        }}
+        sx={{
+          mt: 1.5,
+          "& .MuiPaper-root": {
+            width: 380,
+            maxHeight: 500,
+            borderRadius: 3,
+            boxShadow: "0px 12px 32px rgba(0,0,0,0.5)",
+            border: "1px solid rgba(255, 255, 255, 0.1)",
+            backdropFilter: "blur(10px)",
+            backgroundColor: "rgba(18, 18, 18, 0.95)",
+          },
+        }}
+      >
+        <Box sx={{ p: 2, borderBottom: "1px solid rgba(255, 255, 255, 0.1)" }}>
+          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <Typography variant="h6" fontWeight={700}>
+              Notifications
+            </Typography>
+            {unreadCount > 0 && (
+              <Button
+                size="small"
+                startIcon={<MarkEmailRead />}
+                onClick={handleMarkAllRead}
+                sx={{
+                  fontSize: "0.75rem",
+                  textTransform: "none",
+                  color: "primary.main",
+                }}
+              >
+                Mark all read
+              </Button>
+            )}
+          </Box>
+        </Box>
+
+        <Box sx={{ maxHeight: 400, overflow: "auto" }}>
+          {notificationsLoading ? (
+            <Box sx={{ display: "flex", justifyContent: "center", p: 4 }}>
+              <CircularProgress size={32} />
+            </Box>
+          ) : notifications.length === 0 ? (
+            <Box sx={{ p: 4, textAlign: "center" }}>
+              <Notifications sx={{ fontSize: 48, color: "text.disabled", mb: 1 }} />
+              <Typography variant="body2" color="text.secondary">
+                No notifications yet
+              </Typography>
+            </Box>
+          ) : (
+            <List sx={{ p: 0 }}>
+              {notifications.slice(0, 10).map((notification) => (
+                <ListItemButton
+                  key={notification._id}
+                  onClick={() => handleNotificationItemClick(notification)}
+                  sx={{
+                    py: 2,
+                    px: 2,
+                    borderBottom: "1px solid rgba(255, 255, 255, 0.05)",
+                    backgroundColor: notification.read ? "transparent" : alpha(theme.palette.primary.main, 0.05),
+                    "&:hover": {
+                      backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                    },
+                  }}
+                >
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        fontWeight: notification.read ? 400 : 600,
+                        color: notification.read ? "text.secondary" : "text.primary",
+                        mb: 0.5,
+                      }}
+                    >
+                      {notification.message}
+                    </Typography>
+                    <Typography variant="caption" color="text.disabled">
+                      {notification.timeAgo}
+                    </Typography>
+                  </Box>
+                  <IconButton
+                    size="small"
+                    onClick={(e) => handleDeleteNotification(e, notification._id)}
+                    sx={{
+                      ml: 1,
+                      color: "text.disabled",
+                      "&:hover": {
+                        color: "error.main",
+                      },
+                    }}
+                  >
+                    <Delete fontSize="small" />
+                  </IconButton>
+                </ListItemButton>
+              ))}
+            </List>
+          )}
+        </Box>
+
+        {notifications.length > 10 && (
+          <Box sx={{ p: 2, borderTop: "1px solid rgba(255, 255, 255, 0.1)", textAlign: "center" }}>
+            <Button
+              size="small"
+              onClick={() => {
+                handleNotificationClose();
+                // Navigate to full notifications page when it exists
+              }}
+              sx={{
+                textTransform: "none",
+                color: "primary.main",
+              }}
+            >
+              View all notifications
+            </Button>
+          </Box>
+        )}
+      </Popover>
+
       {/* Mobile Drawer */}
       <Drawer
         variant="temporary"
@@ -513,7 +695,7 @@ const Navbar = () => {
         open={mobileOpen}
         onClose={handleDrawerToggle}
         ModalProps={{
-          keepMounted: true, // Better mobile performance
+          keepMounted: true,
         }}
         sx={{
           display: { xs: "block", md: "none" },

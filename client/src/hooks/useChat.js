@@ -146,7 +146,7 @@ const useChat = (scrimId) => {
    */
   useEffect(() => {
     const handleNewMessage = (data) => {
-      console.log(`📥 [useChat] New message received:`, data);
+      console.log(`🔥 [useChat] New message received:`, data);
       
       if (data.chatId === chatIdRef.current) {
         setMessages(prevMessages => [...prevMessages, data.message]);

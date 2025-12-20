@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box } from '@mui/material';
-import { useChat } from '../../context/ChatContext';
+import { useChat } from '../context/ChatContext';
 import ChatWindow from './ChatWindow';
 
 /**

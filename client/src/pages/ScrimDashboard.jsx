@@ -24,8 +24,9 @@ import {
   alpha,
   Alert,
 } from "@mui/material";
-import { SportsEsports, AccessTime, EmojiEvents, FilterList } from "@mui/icons-material";
+import { SportsEsports, AccessTime, EmojiEvents, FilterList, Message } from "@mui/icons-material";
 import { useAuth } from "../context/AuthContext";
+import { useChat } from "../context/ChatContext";
 import api, { getApiBaseUrl } from '../services/apiClient';
 
 const API_BASE = getApiBaseUrl();
@@ -44,6 +45,7 @@ const ScrimDashboard = () => {
   const navigate = useNavigate();
   const { user, isAuthenticated } = useAuth();
   const theme = useTheme();
+  const { openChat } = useChat();
 
   const [teams, setTeams] = useState([]);
   const [selectedTeam, setSelectedTeam] = useState("");
@@ -175,7 +177,6 @@ const ScrimDashboard = () => {
     }
   }, [loading.games, games]);
 
-  // Separate effect for updating formats when posting team changes
   useEffect(() => {
     if (!selectedTeam || !teams.length || !games.length) return;
 
@@ -191,7 +192,6 @@ const ScrimDashboard = () => {
 
     if (!gameObj) return;
 
-    // Only update formats for the posting form, don't touch filters
     const fmts = gameObj.formats || [];
     setFormats(fmts);
     if (fmts.length && !format) {
@@ -344,11 +344,22 @@ const ScrimDashboard = () => {
     setRequested((prev) => [...prev, scrimId]);
     
     try {
-      await api.post(`/api/scrims/request/${scrimId}`, {
+      const response = await api.post(`/api/scrims/request/${scrimId}`, {
         teamId: selectedRequestTeam
       });
+
+      if (response.success) {
+        console.log('✅ Scrim request sent successfully');
+        // Open chat immediately after request is sent
+        openChat(scrimId);
+        console.log('💬 Opening chat for scrim:', scrimId);
+      }
     } catch (err) {
-      if (err.message === "Scrim request already sent") return;
+      // If already requested, still open the chat
+      if (err.message === "Scrim request already sent") {
+        openChat(scrimId);
+        return;
+      }
       alert(err.message);
       setRequested((prev) => prev.filter((id) => id !== scrimId));
     }
@@ -980,12 +991,32 @@ const ScrimDashboard = () => {
                                     Edit
                                   </Button>
                                 </>
+                              ) : isRequested ? (
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  onClick={() => openChat(scrim._id)}
+                                  startIcon={<Message />}
+                                  sx={{
+                                    borderColor: '#FF00FF',
+                                    color: '#FF00FF',
+                                    fontWeight: 600,
+                                    whiteSpace: "nowrap",
+                                    minWidth: 120,
+                                    "&:hover": {
+                                      borderColor: '#CC00CC',
+                                      bgcolor: 'rgba(255, 0, 255, 0.1)',
+                                    },
+                                  }}
+                                >
+                                  Open Chat
+                                </Button>
                               ) : (
                                 <Button
                                   size="small"
                                   variant="outlined"
                                   onClick={() => handleSendRequest(scrim._id)}
-                                  disabled={isRequested || !selectedRequestTeam}
+                                  disabled={!selectedRequestTeam}
                                   sx={{
                                     borderColor: '#FF00FF',
                                     color: '#FF00FF',
@@ -1002,7 +1033,7 @@ const ScrimDashboard = () => {
                                     },
                                   }}
                                 >
-                                  {isRequested ? "Requested" : "Send Request"}
+                                  Send Request
                                 </Button>
                               )}
                             </Box>

@@ -14,8 +14,8 @@ import {
   Minimize as MinimizeIcon,
   Maximize as MaximizeIcon,
 } from '@mui/icons-material';
-import { useChat as useChatContext } from '../../context/ChatContext';
-import useChat from '../../hooks/useChat';
+import { useChat as useChatContext } from '../context/ChatContext';
+import useChat from '../hooks/useChat';
 import MessageList from './MessageList';
 import MessageInput from './MessageInput';
 

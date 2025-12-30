@@ -3,10 +3,10 @@ import { Box, Typography, Avatar, Tooltip } from '@mui/material';
 import TeamIndicator from './TeamIndicator';
 
 const MessageBubble = ({ message, chat, isOwnMessage }) => {
-  // ✅ Handle both field name formats (prefer correct schema fields)
+  // ✅ Handle both field name formats
   const sender = message.sender || {};
-  const text = message.text || message.content || '';
-  const timestamp = message.timestamp || message.createdAt;
+  const text = message.content || message.text || '';
+  const timestamp = message.createdAt || message.timestamp;
   
   /**
    * Get team info from chat metadata based on senderTeam

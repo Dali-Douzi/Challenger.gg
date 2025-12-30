@@ -668,9 +668,7 @@ exports.acceptScrim = async (req, res) => {
     const { teamId } = req.body;
     const userId = req.user.userId || req.user.id;
 
-    console.log("✅ [ACCEPT-SCRIM] Starting acceptance process");
-    console.log("✅ [ACCEPT-SCRIM] Scrim ID:", scrimId);
-    console.log("✅ [ACCEPT-SCRIM] Team ID:", teamId);
+    console.log("✅ [ACCEPT-SCRIM] Starting acceptance");
 
     if (!teamId) {
       return res.status(400).json({
@@ -724,52 +722,32 @@ exports.acceptScrim = async (req, res) => {
       });
     }
 
-    // Update scrim status FIRST
+    // Update scrim status
     scrim.teamB = teamId;
     scrim.status = "booked";
     scrim.requests = [];
     await scrim.save();
 
-    console.log("✅ [ACCEPT-SCRIM] Scrim updated to booked status");
+    console.log("✅ [ACCEPT-SCRIM] Scrim updated to booked");
 
-    // Emit event - chatService will create the chat
+    // ✅ FIXED: Get existing chat (created when request was made)
+    const Chat = require("../models/Chat");
+    const chat = await Chat.findOne({
+      type: "scrim",
+      "metadata.scrimId": scrim._id,
+    });
+
+    const chatId = chat ? chat._id.toString() : null;
+    console.log("✅ [ACCEPT-SCRIM] Chat found:", chatId);
+
+    // Emit acceptance event (chatService will update chat metadata)
     eventService.emitScrimAccepted({
       scrimId: scrim._id,
       teamA: scrim.teamA,
       teamB: teamId,
       game: scrim.game._id,
+      chatId: chatId,
     });
-
-    console.log("✅ [ACCEPT-SCRIM] Event emitted, waiting for chat creation");
-
-    // Wait for chat to be created with retry logic
-    let chat = null;
-    let attempts = 0;
-    const maxAttempts = 10;
-    const delayMs = 500;
-    
-    while (!chat && attempts < maxAttempts) {
-      await new Promise(resolve => setTimeout(resolve, delayMs));
-      chat = await Chat.findOne({
-        type: "scrim",
-        "metadata.scrimId": scrim._id,
-      });
-      attempts++;
-      
-      if (chat) {
-        console.log(`✅ [ACCEPT-SCRIM] Chat found on attempt ${attempts}`);
-      } else {
-        console.log(`⏳ [ACCEPT-SCRIM] Chat not found yet, attempt ${attempts}/${maxAttempts}`);
-      }
-    }
-
-    if (!chat) {
-      console.error(`❌ [ACCEPT-SCRIM] Chat not created after ${maxAttempts} attempts for scrim ${scrim._id}`);
-    }
-
-    const chatId = chat ? chat._id.toString() : null;
-
-    console.log("✅ [ACCEPT-SCRIM] Creating notifications with chatId:", chatId);
 
     // Create notifications
     const [acceptNotification, feedbackNotification] = await Promise.all([
@@ -791,8 +769,6 @@ exports.acceptScrim = async (req, res) => {
       }),
     ]);
 
-    console.log("✅ [ACCEPT-SCRIM] Notifications created");
-
     // Emit notifications via Socket.IO
     const io = req.app.get("io");
     if (io) {
@@ -804,8 +780,6 @@ exports.acceptScrim = async (req, res) => {
         teamId: scrim.teamA,
         notification: feedbackNotification,
       });
-      
-      console.log(`✅ [ACCEPT-SCRIM] Notifications emitted to teams`);
     }
 
     const updatedScrim = await Scrim.findById(scrim._id)
@@ -819,7 +793,7 @@ exports.acceptScrim = async (req, res) => {
       success: true,
       message: "Scrim request accepted successfully",
       data: updatedScrim,
-      chatId: chatId,
+      chatId: chatId, // Always return chatId for frontend navigation
     });
   } catch (error) {
     console.error("❌ [ACCEPT-SCRIM] Error:", error);

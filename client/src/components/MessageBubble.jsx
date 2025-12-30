@@ -2,17 +2,50 @@ import React from 'react';
 import { Box, Typography, Avatar, Tooltip } from '@mui/material';
 import TeamIndicator from './TeamIndicator';
 
-/**
- * MessageBubble
- * Individual message display with sender info and team context
- */
 const MessageBubble = ({ message, chat, isOwnMessage }) => {
-  const { sender, text, timestamp, teamInfo } = message;
+  // ✅ Handle both field name formats (prefer correct schema fields)
+  const sender = message.sender || {};
+  const text = message.text || message.content || '';
+  const timestamp = message.timestamp || message.createdAt;
+  
+  /**
+   * Get team info from chat metadata based on senderTeam
+   */
+  const getTeamInfo = () => {
+    if (!chat?.metadata?.teams || !message.senderTeam) {
+      return null;
+    }
+
+    const { host, challenger } = chat.metadata.teams;
+    
+    // Check if sender is from host team
+    if (message.senderTeam.toString() === host.id.toString()) {
+      return {
+        teamName: host.name,
+        teamLogo: host.logo,
+        role: 'host',
+      };
+    }
+    
+    // Check if sender is from challenger team
+    if (message.senderTeam.toString() === challenger.id.toString()) {
+      return {
+        teamName: challenger.name,
+        teamLogo: challenger.logo,
+        role: 'challenger',
+      };
+    }
+    
+    return null;
+  };
+
+  const teamInfo = getTeamInfo();
 
   /**
-   * Format time (e.g., "2:30 PM")
+   * Format timestamp to readable time (e.g., "2:30 PM")
    */
   const formatTime = (date) => {
+    if (!date) return '';
     return new Date(date).toLocaleTimeString('en-US', {
       hour: 'numeric',
       minute: '2-digit',
@@ -29,9 +62,9 @@ const MessageBubble = ({ message, chat, isOwnMessage }) => {
         mb: 0.5,
       }}
     >
-      {/* Avatar */}
+      {/* Avatar - only show for opponent messages */}
       {!isOwnMessage && (
-        <Tooltip title={sender.username} placement="left">
+        <Tooltip title={sender.username || 'Unknown'} placement="left">
           <Avatar
             src={sender.avatar}
             alt={sender.username}
@@ -41,7 +74,7 @@ const MessageBubble = ({ message, chat, isOwnMessage }) => {
               fontSize: '0.75rem',
             }}
           >
-            {sender.username?.[0]?.toUpperCase()}
+            {sender.username?.[0]?.toUpperCase() || '?'}
           </Avatar>
         </Tooltip>
       )}
@@ -74,9 +107,10 @@ const MessageBubble = ({ message, chat, isOwnMessage }) => {
                 fontSize: '0.7rem',
               }}
             >
-              {sender.username}
+              {sender.username || 'Unknown'}
             </Typography>
             
+            {/* Team Indicator Badge */}
             {teamInfo && (
               <TeamIndicator
                 teamName={teamInfo.teamName}
@@ -98,7 +132,7 @@ const MessageBubble = ({ message, chat, isOwnMessage }) => {
             py: 1,
             wordWrap: 'break-word',
             position: 'relative',
-            // Tail/pointer
+            // Speech bubble tail/pointer
             '&::before': {
               content: '""',
               position: 'absolute',
@@ -108,12 +142,14 @@ const MessageBubble = ({ message, chat, isOwnMessage }) => {
               borderStyle: 'solid',
               ...(isOwnMessage
                 ? {
+                    // Tail on right for own messages
                     right: -6,
                     borderWidth: '6px 0 0 6px',
                     borderColor: `transparent transparent transparent`,
                     borderLeftColor: 'primary.main',
                   }
                 : {
+                    // Tail on left for opponent messages
                     left: -6,
                     borderWidth: '6px 6px 0 0',
                     borderColor: `transparent`,
@@ -127,7 +163,7 @@ const MessageBubble = ({ message, chat, isOwnMessage }) => {
             sx={{
               fontSize: '0.875rem',
               lineHeight: 1.4,
-              whiteSpace: 'pre-wrap',
+              whiteSpace: 'pre-wrap', // Preserve line breaks
             }}
           >
             {text}

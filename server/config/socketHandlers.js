@@ -6,20 +6,33 @@ const jwt = require("jsonwebtoken");
  */
 const socketAuthMiddleware = (socket, next) => {
   try {
-    const token = socket.handshake.auth.token;
+    // Try auth header first
+    let token = socket.handshake.auth.token;
+    
+    // ✅ FIXED: Fallback to extract from cookies (for browsers)
+    if (!token) {
+      const cookies = socket.handshake.headers.cookie;
+      if (cookies) {
+        const tokenMatch = cookies.match(/accessToken=([^;]+)/);
+        if (tokenMatch) {
+          token = tokenMatch[1];
+        }
+      }
+    }
     
     if (!token) {
+      console.error("❌ Socket auth failed: No token");
       return next(new Error("Authentication error: No token provided"));
     }
     
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    socket.userId = decoded.userId;
+    socket.userId = decoded.userId || decoded.id;
     socket.username = decoded.username;
     
-    console.log(`🔐 Socket authenticated: ${socket.username} (${socket.userId})`);
+    console.log(`🔓 Socket authenticated: ${socket.username}`);
     next();
   } catch (err) {
-    console.error("Socket authentication failed:", err.message);
+    console.error("❌ Socket auth failed:", err.message);
     next(new Error("Authentication error: Invalid token"));
   }
 };
@@ -46,25 +59,30 @@ const initializeSocketHandlers = (io) => {
      * @param {string} chatId - The chat ID to join
      */
     socket.on("joinChat", (chatId) => {
-      if (!chatId) {
-        return socket.emit("error", { message: "Chat ID is required" });
+      try {
+        if (!chatId) {
+          return socket.emit("error", { message: "Chat ID is required" });
+        }
+
+        socket.join(chatId);
+        console.log(`💬 ${socket.username} joined chat: ${chatId}`);
+
+        // Notify others in the room
+        socket.to(chatId).emit("userJoined", {
+          userId: socket.userId,
+          username: socket.username,
+          timestamp: new Date(),
+        });
+
+        // Confirm join to the user
+        socket.emit("chatJoined", {
+          chatId,
+          message: "Successfully joined chat",
+        });
+      } catch (error) {
+        console.error(`❌ Error joining chat ${chatId}:`, error);
+        socket.emit("error", { message: "Failed to join chat" });
       }
-      
-      socket.join(chatId);
-      console.log(`💬 ${socket.username} joined chat: ${chatId}`);
-      
-      // Notify others in the room
-      socket.to(chatId).emit("userJoined", {
-        userId: socket.userId,
-        username: socket.username,
-        timestamp: new Date(),
-      });
-      
-      // Confirm join to the user
-      socket.emit("chatJoined", {
-        chatId,
-        message: "Successfully joined chat",
-      });
     });
     
     /**
@@ -73,19 +91,24 @@ const initializeSocketHandlers = (io) => {
      * @param {string} chatId - The chat ID to leave
      */
     socket.on("leaveChat", (chatId) => {
-      if (!chatId) {
-        return socket.emit("error", { message: "Chat ID is required" });
+      try {
+        if (!chatId) {
+          return socket.emit("error", { message: "Chat ID is required" });
+        }
+
+        socket.leave(chatId);
+        console.log(`💬 ${socket.username} left chat: ${chatId}`);
+
+        // Notify others in the room
+        socket.to(chatId).emit("userLeft", {
+          userId: socket.userId,
+          username: socket.username,
+          timestamp: new Date(),
+        });
+      } catch (error) {
+        console.error(`❌ Error leaving chat ${chatId}:`, error);
+        socket.emit("error", { message: "Failed to leave chat" });
       }
-      
-      socket.leave(chatId);
-      console.log(`💬 ${socket.username} left chat: ${chatId}`);
-      
-      // Notify others in the room
-      socket.to(chatId).emit("userLeft", {
-        userId: socket.userId,
-        username: socket.username,
-        timestamp: new Date(),
-      });
     });
     
     /**
@@ -118,20 +141,25 @@ const initializeSocketHandlers = (io) => {
      * @param {string} teamId - The team ID to join
      */
     socket.on("joinTeam", (teamId) => {
-      if (!teamId) {
-        return socket.emit("error", { message: "Team ID is required" });
+      try {
+        if (!teamId) {
+          return socket.emit("error", { message: "Team ID is required" });
+        }
+
+        const roomName = `team:${teamId}`;
+        socket.join(roomName);
+        console.log(`👥 ${socket.username} joined team room: ${roomName}`);
+
+        // Confirm join to the user
+        socket.emit("teamJoined", {
+          teamId,
+          roomName,
+          message: "Successfully joined team notifications",
+        });
+      } catch (error) {
+        console.error(`❌ Error joining team ${teamId}:`, error);
+        socket.emit("error", { message: "Failed to join team" });
       }
-      
-      const roomName = `team:${teamId}`;
-      socket.join(roomName);
-      console.log(`👥 ${socket.username} joined team room: ${roomName}`);
-      
-      // Confirm join to the user
-      socket.emit("teamJoined", {
-        teamId,
-        roomName,
-        message: "Successfully joined team notifications",
-      });
     });
     
     /**
@@ -140,26 +168,31 @@ const initializeSocketHandlers = (io) => {
      * @param {string[]} teamIds - Array of team IDs to join
      */
     socket.on("joinTeams", (teamIds) => {
-      if (!Array.isArray(teamIds) || teamIds.length === 0) {
-        return socket.emit("error", { message: "Team IDs array is required" });
+      try {
+        if (!Array.isArray(teamIds) || teamIds.length === 0) {
+          return socket.emit("error", { message: "Team IDs array is required" });
+        }
+
+        const roomNames = [];
+        teamIds.forEach((teamId) => {
+          const roomName = `team:${teamId}`;
+          socket.join(roomName);
+          roomNames.push(roomName);
+        });
+
+        console.log(`👥 ${socket.username} joined ${teamIds.length} team rooms`);
+
+        // Confirm joins to the user
+        socket.emit("teamsJoined", {
+          teamIds,
+          roomNames,
+          count: teamIds.length,
+          message: `Successfully joined ${teamIds.length} team notification rooms`,
+        });
+      } catch (error) {
+        console.error(`❌ Error joining teams:`, error);
+        socket.emit("error", { message: "Failed to join teams" });
       }
-      
-      const roomNames = [];
-      teamIds.forEach((teamId) => {
-        const roomName = `team:${teamId}`;
-        socket.join(roomName);
-        roomNames.push(roomName);
-      });
-      
-      console.log(`👥 ${socket.username} joined ${teamIds.length} team rooms`);
-      
-      // Confirm joins to the user
-      socket.emit("teamsJoined", {
-        teamIds,
-        roomNames,
-        count: teamIds.length,
-        message: `Successfully joined ${teamIds.length} team notification rooms`,
-      });
     });
     
     /**

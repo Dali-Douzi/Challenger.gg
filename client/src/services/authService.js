@@ -1,14 +1,6 @@
-import api, { getApiBaseUrl } from './apiClient';
-
-/**
- * Authentication Service
- * Handles all auth-related API calls
- */
+import api from './apiClient';
 
 export const authService = {
-  /**
-   * Check current authentication status
-   */
   checkAuth: async () => {
     try {
       return await api.get('/api/auth/me');
@@ -17,9 +9,6 @@ export const authService = {
     }
   },
 
-  /**
-   * Login with username/email and password
-   */
   login: async (identifier, password, rememberMe = false) => {
     try {
       return await api.post('/api/auth/login', {
@@ -32,10 +21,6 @@ export const authService = {
     }
   },
 
-  /**
-   * Sign up new user
-   * @param {FormData} formData - Form data with username, email, password, and optional avatar
-   */
   signup: async (formData) => {
     try {
       return await api.post('/api/auth/signup', formData);
@@ -44,71 +29,41 @@ export const authService = {
     }
   },
 
-  /**
-   * Logout current user
-   */
   logout: async () => {
     try {
-      return await api.post('/api/auth/logout', {});
+      return await api.post('/api/auth/logout');
     } catch (error) {
       throw error;
     }
   },
 
-  /**
-   * Refresh access token
-   */
   refreshToken: async () => {
     try {
-      return await api.post('/api/auth/refresh', {});
+      return await api.post('/api/auth/refresh');
     } catch (error) {
       throw error;
     }
   },
 
-  /**
-   * Get user profile
-   */
-  getProfile: async () => {
-    try {
-      return await api.get('/api/auth/profile');
-    } catch (error) {
-      throw error;
-    }
-  },
-
-  /**
-   * Update username
-   */
   updateUsername: async (newUsername) => {
     try {
-      return await api.put('/api/auth/change-username', {
-        newUsername,
-      });
+      return await api.put('/api/auth/update-username', { username: newUsername });
     } catch (error) {
       throw error;
     }
   },
 
-  /**
-   * Update email
-   */
   updateEmail: async (newEmail) => {
     try {
-      return await api.put('/api/auth/change-email', {
-        newEmail,
-      });
+      return await api.put('/api/auth/update-email', { email: newEmail });
     } catch (error) {
       throw error;
     }
   },
 
-  /**
-   * Update password
-   */
   updatePassword: async (currentPassword, newPassword) => {
     try {
-      return await api.put('/api/auth/change-password', {
+      return await api.put('/api/auth/update-password', {
         currentPassword,
         newPassword,
       });
@@ -117,25 +72,16 @@ export const authService = {
     }
   },
 
-  /**
-   * Update avatar
-   * @param {File} avatarFile - Image file
-   * @param {string} currentPassword - Current password for verification
-   */
   updateAvatar: async (avatarFile) => {
     try {
       const formData = new FormData();
       formData.append('avatar', avatarFile);
-      
-      return await api.put('/api/auth/change-avatar', formData);
+      return await api.put('/api/auth/update-avatar', formData);
     } catch (error) {
       throw error;
     }
   },
 
-  /**
-   * Delete avatar
-   */
   deleteAvatar: async () => {
     try {
       return await api.delete('/api/auth/delete-avatar');
@@ -144,46 +90,14 @@ export const authService = {
     }
   },
 
-  /**
-   * Delete account
-   */
   deleteAccount: async (currentPassword) => {
     try {
       return await api.delete('/api/auth/delete-account', {
-        body: JSON.stringify({ currentPassword }),
+        data: { password: currentPassword },
       });
     } catch (error) {
       throw error;
     }
-  },
-
-  /**
-   * Get linked OAuth accounts
-   */
-  getLinkedAccounts: async () => {
-    try {
-      return await api.get('/api/auth/linked-accounts');
-    } catch (error) {
-      throw error;
-    }
-  },
-
-  /**
-   * Unlink OAuth provider
-   */
-  unlinkProvider: async (provider) => {
-    try {
-      return await api.delete(`/api/auth/unlink/${provider}`);
-    } catch (error) {
-      throw error;
-    }
-  },
-
-  /**
-   * Get OAuth login URL
-   */
-  getOAuthUrl: (provider) => {
-    return `${getApiBaseUrl()}/api/auth/${provider}`;
   },
 };
 

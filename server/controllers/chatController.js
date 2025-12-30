@@ -1,8 +1,6 @@
 const Chat = require("../models/Chat");
 const Team = require("../models/Team");
-const Scrim = require("../models/Scrim");
-const mongoose = require("mongoose");
-const eventService = require("../services/eventService");
+const Notification = require("../models/Notification");
 const chatService = require("../services/chatService");
 
 /**
@@ -12,162 +10,107 @@ exports.getUserChats = async (req, res) => {
   try {
     const userId = req.user.userId || req.user.id;
 
-    console.log("💬 [GET-CHATS] Fetching chats for user:", userId);
-
     const chats = await Chat.find({
       participants: userId,
     })
-      .populate("participants", "username avatar email")
-      .populate("messages.sender", "username avatar")
-      .populate("messages.senderTeam", "name logo")
+      .populate("participants", "username avatar")
       .populate("teamParticipants.team", "name logo")
       .sort({ lastMessageAt: -1 })
       .lean();
 
-    console.log("✅ [GET-CHATS] Found chats:", chats.length);
+    // Add unread count for each chat
+    const chatsWithUnread = chats.map((chat) => {
+      const unreadCount = chat.messages?.filter(
+        (msg) =>
+          !msg.readBy?.some((r) => r.user?.toString() === userId.toString()) &&
+          msg.sender.toString() !== userId.toString()
+      ).length || 0;
 
-    // Enrich chat data with team info for display
-    const enrichedChats = chats.map((chat) => {
-      if (chat.type === "scrim" && chat.metadata?.teams) {
-        return {
-          ...chat,
-          title: `${chat.metadata.teams.host.name} vs ${chat.metadata.teams.challenger.name}`,
-          avatar: null,
-        };
-      }
-
-      if (chat.type === "team" && chat.metadata?.teamName) {
-        return {
-          ...chat,
-          title: chat.metadata.teamName,
-          avatar: chat.metadata.teamLogo,
-        };
-      }
-
-      if (chat.type === "dm") {
-        const otherUser = chat.participants.find(
-          (p) => p._id.toString() !== userId.toString()
-        );
-        return {
-          ...chat,
-          title: otherUser?.username || "Unknown User",
-          avatar: otherUser?.avatar,
-        };
-      }
-
-      return chat;
+      return {
+        ...chat,
+        unreadCount,
+      };
     });
 
-    res.status(200).json({
+    res.json({
       success: true,
-      data: enrichedChats,
-      count: enrichedChats.length,
+      data: chatsWithUnread,
+      count: chatsWithUnread.length,
     });
   } catch (error) {
-    console.error("❌ [GET-CHATS] Error:", error);
+    console.error("Get user chats error:", error);
     res.status(500).json({
       success: false,
       message: "Error fetching chats",
-      error: error.message,
+      ...(process.env.NODE_ENV === "development" && {
+        error: error.message,
+      }),
     });
   }
 };
 
 /**
- * Create a new chat (DM or group)
+ * Get chat by ID
  */
-exports.createChat = async (req, res) => {
+exports.getChatById = async (req, res) => {
   try {
+    const { chatId } = req.params;
     const userId = req.user.userId || req.user.id;
-    const { type, participants } = req.body;
 
-    console.log("💬 [CREATE-CHAT] Request:", { userId, type, participants });
+    const chat = await Chat.findById(chatId)
+      .populate("participants", "username avatar")
+      .populate("messages.sender", "username avatar")
+      .populate("teamParticipants.team", "name logo");
 
-    if (!type || !participants || !Array.isArray(participants)) {
-      return res.status(400).json({
+    if (!chat) {
+      return res.status(404).json({
         success: false,
-        message: "Please provide type and participants array",
+        message: "Chat not found",
       });
     }
 
-    // For DM, use the helper method
-    if (type === "dm") {
-      if (participants.length !== 1) {
-        return res.status(400).json({
-          success: false,
-          message: "DM must have exactly one other participant",
-        });
-      }
+    // Check if user is a participant
+    const isParticipant = chat.participants.some(
+      (p) => p._id.toString() === userId.toString()
+    );
 
-      const chat = await Chat.findOrCreateDM(userId, participants[0]);
-
-      const populatedChat = await Chat.findById(chat._id)
-        .populate("participants", "username avatar email")
-        .populate("messages.sender", "username avatar");
-
-      console.log("✅ [CREATE-CHAT] DM chat created/found:", chat._id);
-
-      return res.status(200).json({
-        success: true,
-        data: populatedChat,
-        created: chat.messages.length === 0,
+    if (!isParticipant) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized to view this chat",
       });
     }
 
-    // For other types, create normally
-    const allParticipants = [userId, ...participants];
-
-    const chat = await Chat.create({
-      type,
-      participants: allParticipants,
-      messages: [],
-    });
-
-    const populatedChat = await Chat.findById(chat._id)
-      .populate("participants", "username avatar email")
-      .populate("messages.sender", "username avatar");
-
-    console.log("✅ [CREATE-CHAT] Chat created:", chat._id);
-
-    res.status(201).json({
+    res.json({
       success: true,
-      data: populatedChat,
-      created: true,
+      data: chat,
     });
   } catch (error) {
-    console.error("❌ [CREATE-CHAT] Error:", error);
+    console.error("Get chat error:", error);
     res.status(500).json({
       success: false,
-      message: "Error creating chat",
-      error: error.message,
+      message: "Error fetching chat",
+      ...(process.env.NODE_ENV === "development" && {
+        error: error.message,
+      }),
     });
   }
 };
 
 /**
- * Get chat by scrim ID
+ * Get chat by scrim ID (fallback for ScrimRequests.jsx)
  */
 exports.getChatByScrimId = async (req, res) => {
   try {
     const { scrimId } = req.params;
     const userId = req.user.userId || req.user.id;
 
-    console.log("💬 [GET-CHAT-BY-SCRIM] Request:", { scrimId, userId });
-
-    if (!mongoose.Types.ObjectId.isValid(scrimId)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid scrim ID",
-      });
-    }
-
     const chat = await Chat.findOne({
       type: "scrim",
       "metadata.scrimId": scrimId,
     })
-      .populate("participants", "username avatar email")
+      .populate("participants", "username avatar")
       .populate("messages.sender", "username avatar")
-      .populate("messages.senderTeam", "name logo")
       .populate("teamParticipants.team", "name logo");
 
     if (!chat) {
@@ -185,113 +128,43 @@ exports.getChatByScrimId = async (req, res) => {
     if (!isParticipant) {
       return res.status(403).json({
         success: false,
-        message: "Not authorized to access this chat",
+        message: "Not authorized to view this chat",
       });
     }
 
-    console.log("✅ [GET-CHAT-BY-SCRIM] Chat found:", chat._id);
-
-    res.status(200).json({
+    res.json({
       success: true,
       data: chat,
     });
   } catch (error) {
-    console.error("❌ [GET-CHAT-BY-SCRIM] Error:", error);
+    console.error("Get chat by scrim error:", error);
     res.status(500).json({
       success: false,
       message: "Error fetching chat",
-      error: error.message,
+      ...(process.env.NODE_ENV === "development" && {
+        error: error.message,
+      }),
     });
   }
 };
 
 /**
- * Get specific chat by ID
- */
-exports.getChatById = async (req, res) => {
-  try {
-    const { chatId } = req.params;
-    const userId = req.user.userId || req.user.id;
-
-    console.log("💬 [GET-CHAT] Request:", { chatId, userId });
-
-    if (!mongoose.Types.ObjectId.isValid(chatId)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid chat ID",
-      });
-    }
-
-    const chat = await Chat.findById(chatId)
-      .populate("participants", "username avatar email")
-      .populate("messages.sender", "username avatar")
-      .populate("messages.senderTeam", "name logo")
-      .populate("teamParticipants.team", "name logo");
-
-    if (!chat) {
-      return res.status(404).json({
-        success: false,
-        message: "Chat not found",
-      });
-    }
-
-    // Check if user is a participant
-    const isParticipant = chat.participants.some(
-      (p) => p._id.toString() === userId.toString()
-    );
-
-    if (!isParticipant) {
-      return res.status(403).json({
-        success: false,
-        message: "Not authorized to access this chat",
-      });
-    }
-
-    console.log("✅ [GET-CHAT] Chat found:", chat._id);
-
-    res.status(200).json({
-      success: true,
-      data: chat,
-    });
-  } catch (error) {
-    console.error("❌ [GET-CHAT] Error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error fetching chat",
-      error: error.message,
-    });
-  }
-};
-
-/**
- * Send a message to a chat
+ * Send message
  */
 exports.sendMessage = async (req, res) => {
   try {
     const { chatId } = req.params;
-    const { text } = req.body;
+    const { content } = req.body;
     const userId = req.user.userId || req.user.id;
 
-    console.log("💬 [SEND-MESSAGE] Request:", { chatId, userId, textLength: text?.length });
-
-    if (!mongoose.Types.ObjectId.isValid(chatId)) {
+    if (!content || !content.trim()) {
       return res.status(400).json({
         success: false,
-        message: "Invalid chat ID",
+        message: "Message content is required",
       });
     }
 
-    if (!text || !text.trim()) {
-      return res.status(400).json({
-        success: false,
-        message: "Message text is required",
-      });
-    }
-
-    const chat = await Chat.findById(chatId)
-      .populate("participants", "username avatar email")
-      .populate("teamParticipants.team", "name logo");
-
+    const chat = await Chat.findById(chatId);
     if (!chat) {
       return res.status(404).json({
         success: false,
@@ -301,7 +174,7 @@ exports.sendMessage = async (req, res) => {
 
     // Check if user is a participant
     const isParticipant = chat.participants.some(
-      (p) => p._id.toString() === userId.toString()
+      (p) => p.toString() === userId.toString()
     );
 
     if (!isParticipant) {
@@ -311,88 +184,211 @@ exports.sendMessage = async (req, res) => {
       });
     }
 
-    // Determine sender's team (for scrim chats)
+    // Determine sender team for scrim chats
     let senderTeam = null;
-    let teamInfo = null;
-
     if (chat.type === "scrim") {
       senderTeam = chatService.determineSenderTeam(userId, chat);
+    }
+
+    // Create message
+    const message = {
+      sender: userId,
+      text: content.trim(),
+      senderTeam: senderTeam,
+      readBy: [{ user: userId, readAt: new Date() }],
+      timestamp: new Date(),
+    };
+
+    chat.messages.push(message);
+    chat.lastMessageAt = new Date();
+    await chat.save();
+
+    // Populate the new message
+    await chat.populate("messages.sender", "username avatar");
+    const newMessage = chat.messages[chat.messages.length - 1];
+
+    // Emit Socket.IO event to all participants
+    const io = req.app.get("io");
+    if (io) {
+      io.to(chatId).emit("newMessage", {
+        chatId: chat._id,
+        message: newMessage,
+      });
+    }
+
+    // Create notifications for other participants
+    const otherParticipants = chat.participants.filter(
+      (p) => p.toString() !== userId.toString()
+    );
+
+    if (chat.type === "scrim" && chat.metadata?.scrimId) {
+      // For scrim chats, create team-based notifications
+      const senderUser = await require("../models/User").findById(userId);
       
-      if (chat.metadata?.teams) {
-        const { host, challenger } = chat.metadata.teams;
+      for (const participantId of otherParticipants) {
+        const participantTeam = chatService.determineSenderTeam(participantId, chat);
         
-        if (senderTeam && senderTeam.toString() === host.id.toString()) {
-          teamInfo = {
-            teamId: host.id,
-            teamName: host.name,
-            teamLogo: host.logo,
-            role: "host",
-          };
-        } else if (senderTeam && senderTeam.toString() === challenger.id.toString()) {
-          teamInfo = {
-            teamId: challenger.id,
-            teamName: challenger.name,
-            teamLogo: challenger.logo,
-            role: "challenger",
-          };
+        if (participantTeam) {
+          await Notification.create({
+            team: participantTeam,
+            scrim: chat.metadata.scrimId,
+            chat: chat._id,
+            message: `${senderUser.username} sent a message`,
+            type: "message",
+            url: `/chats/${chat._id}`,
+          });
+
+          // Emit notification
+          if (io) {
+            io.to(`team:${participantTeam}`).emit("newNotification", {
+              teamId: participantTeam,
+              notification: {
+                message: `${senderUser.username} sent a message`,
+                type: "message",
+                url: `/chats/${chat._id}`,
+              },
+            });
+          }
         }
       }
     }
 
-    // Add message using model method
-    await chat.addMessage(userId, text, senderTeam);
-
-    // Get the newly added message
-    const newMessage = chat.messages[chat.messages.length - 1];
-
-    // Emit real-time message via Socket.IO
-    const io = req.app.get("io");
-    if (io) {
-      io.to(chatId).emit("newMessage", {
-        chatId: chatId,
-        message: {
-          _id: newMessage._id,
-          sender: {
-            _id: userId,
-            username: req.user.username || "Unknown",
-          },
-          senderTeam: teamInfo,
-          text: newMessage.text,
-          timestamp: newMessage.timestamp,
-        },
-      });
-      console.log("📤 [SEND-MESSAGE] Emitted to room:", chatId);
-    }
-
-    // Emit event for notification service
-    eventService.emitMessageSent({
-      chatId,
-      chat,
-      message: newMessage,
-      senderTeam,
-      teamInfo,
-    });
-
-    // Populate the updated chat
-    const updatedChat = await Chat.findById(chatId)
-      .populate("participants", "username avatar email")
-      .populate("messages.sender", "username avatar")
-      .populate("messages.senderTeam", "name logo")
-      .populate("teamParticipants.team", "name logo");
-
-    console.log("✅ [SEND-MESSAGE] Message sent successfully");
-
-    res.status(200).json({
+    res.json({
       success: true,
-      data: updatedChat,
       message: "Message sent successfully",
+      data: newMessage,
     });
   } catch (error) {
-    console.error("❌ [SEND-MESSAGE] Error:", error);
+    console.error("Send message error:", error);
     res.status(500).json({
       success: false,
       message: "Error sending message",
-      error: error.message,
+      ...(process.env.NODE_ENV === "development" && {
+        error: error.message,
+      }),
+    });
+  }
+};
+
+/**
+ * Mark chat as read
+ */
+exports.markAsRead = async (req, res) => {
+  try {
+    const { chatId } = req.params;
+    const userId = req.user.userId || req.user.id;
+
+    const chat = await Chat.findById(chatId);
+    if (!chat) {
+      return res.status(404).json({
+        success: false,
+        message: "Chat not found",
+      });
+    }
+
+    // Mark all messages as read by this user
+    chat.messages.forEach((message) => {
+      if (!message.readBy.some((r) => r.user.toString() === userId.toString())) {
+        message.readBy.push({ user: userId, readAt: new Date() });
+      }
+    });
+
+    await chat.save();
+
+    res.json({
+      success: true,
+      message: "Chat marked as read",
+    });
+  } catch (error) {
+    console.error("Mark as read error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error marking chat as read",
+      ...(process.env.NODE_ENV === "development" && {
+        error: error.message,
+      }),
+    });
+  }
+};
+
+/**
+ * Delete chat
+ */
+exports.deleteChat = async (req, res) => {
+  try {
+    const { chatId } = req.params;
+    const userId = req.user.userId || req.user.id;
+
+    const chat = await Chat.findById(chatId);
+    if (!chat) {
+      return res.status(404).json({
+        success: false,
+        message: "Chat not found",
+      });
+    }
+
+    // Permission check based on chat type
+    let canDelete = false;
+
+    if (chat.type === "scrim") {
+      // For scrim chats, only team owners/managers can delete
+      const userTeams = await Team.find({
+        $or: [
+          { owner: userId },
+          { "members.user": userId, "members.role": { $in: ["manager", "owner"] } },
+        ],
+      });
+
+      const teamIds = userTeams.map((t) => t._id.toString());
+      const chatTeamIds = chat.teamParticipants.map((tp) =>
+        tp.team.toString()
+      );
+
+      canDelete = chatTeamIds.some((id) => teamIds.includes(id));
+    } else if (chat.type === "dm") {
+      // For DMs, any participant can delete
+      canDelete = chat.participants.some(
+        (p) => p.toString() === userId.toString()
+      );
+    } else if (chat.type === "team") {
+      // For team chats, only team owner can delete
+      const team = await Team.findById(chat.metadata.teamId);
+      canDelete = team && team.owner.toString() === userId.toString();
+    }
+
+    if (!canDelete) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized to delete this chat",
+      });
+    }
+
+    await Chat.findByIdAndDelete(chatId);
+
+    // Delete related notifications
+    await Notification.deleteMany({ chat: chatId });
+
+    // Emit Socket.IO event
+    const io = req.app.get("io");
+    if (io) {
+      io.to(chatId).emit("chatDeleted", {
+        chatId: chatId,
+        message: "This chat has been deleted",
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Chat deleted successfully",
+    });
+  } catch (error) {
+    console.error("Delete chat error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error deleting chat",
+      ...(process.env.NODE_ENV === "development" && {
+        error: error.message,
+      }),
     });
   }
 };

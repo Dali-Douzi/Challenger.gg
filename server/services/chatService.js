@@ -16,12 +16,38 @@ class ChatService {
    * Setup event listeners
    */
   setupEventListeners() {
-    // Scrim request created → Create chat
+    // ✅ FIXED: Create chat when scrim REQUEST is made (not acceptance)
+    // This allows teams to communicate BEFORE accepting
     eventService.on("scrim:request_created", async (data) => {
       try {
+        console.log("📨 [CHAT-SERVICE] Scrim request created, creating chat:", data.scrimId);
         await this.createScrimChat(data);
       } catch (error) {
-        console.error("Error creating scrim chat:", error);
+        console.error("❌ [CHAT-SERVICE] Error creating scrim chat:", error);
+      }
+    });
+
+    // Update chat metadata when scrim is accepted
+    eventService.on("scrim:accepted", async (data) => {
+      try {
+        console.log("✅ [CHAT-SERVICE] Scrim accepted, updating chat:", data.scrimId);
+        
+        const chat = await Chat.findOne({
+          type: "scrim",
+          "metadata.scrimId": data.scrimId,
+        });
+
+        if (chat) {
+          chat.metadata.status = "accepted";
+          chat.metadata.acceptedAt = new Date();
+          await chat.save();
+          console.log("✅ [CHAT-SERVICE] Chat metadata updated");
+        } else {
+          console.warn("⚠️ [CHAT-SERVICE] Chat not found, creating new one");
+          await this.createScrimChat(data);
+        }
+      } catch (error) {
+        console.error("❌ [CHAT-SERVICE] Error updating chat:", error);
       }
     });
 
@@ -29,7 +55,6 @@ class ChatService {
     eventService.on("team:created", async (data) => {
       try {
         // await this.createTeamChat(data);
-        // Uncomment if you want automatic team chats
       } catch (error) {
         console.error("Error creating team chat:", error);
       }
@@ -52,7 +77,6 @@ class ChatService {
    */
   async createScrimChat({ scrimId, teamA, teamB, game }) {
     try {
-      // Check if chat already exists
       const existingChat = await Chat.findOne({
         type: "scrim",
         "metadata.scrimId": scrimId,
@@ -63,7 +87,6 @@ class ChatService {
         return existingChat;
       }
 
-      // Load both teams
       const hostTeam = await Team.findById(teamA).populate(
         "members.user",
         "_id username avatar"
@@ -77,44 +100,28 @@ class ChatService {
         throw new Error("One or both teams not found");
       }
 
-      // Collect all participants
-      const hostMembers = [
-        hostTeam.owner,
-        ...hostTeam.members.map((m) => m.user._id),
-      ];
-      const challengerMembers = [
-        challengerTeam.owner,
-        ...challengerTeam.members.map((m) => m.user._id),
-      ];
+      // ✅ FIXED: Members array already includes owner
+      const hostMembers = hostTeam.members.map((m) => m.user._id || m.user);
+      const challengerMembers = challengerTeam.members.map((m) => m.user._id || m.user);
 
       const allParticipants = [...hostMembers, ...challengerMembers];
-
-      // Remove duplicates
       const uniqueParticipants = [
-        ...new Set(allParticipants.map((p) => p.toString())),
+        ...new Set(allParticipants.map((p) => (p.toString ? p.toString() : p))),
       ];
 
-      // Create chat with team context
+      console.log(`👥 Creating chat with ${uniqueParticipants.length} participants`);
+
       const chat = await Chat.create({
         type: "scrim",
         participants: uniqueParticipants,
-
-        // Team structure
         teamParticipants: [
-          {
-            team: hostTeam._id,
-            role: "host",
-          },
-          {
-            team: challengerTeam._id,
-            role: "challenger",
-          },
+          { team: hostTeam._id, role: "host" },
+          { team: challengerTeam._id, role: "challenger" },
         ],
-
-        // Rich metadata for frontend
         metadata: {
           scrimId,
           game,
+          status: "pending",
           teams: {
             host: {
               id: hostTeam._id,
@@ -134,12 +141,21 @@ class ChatService {
 
       console.log(`💬 Created scrim chat ${chat._id} for scrim ${scrimId}`);
 
-      // Emit chat created event
       eventService.emitChatCreated({
         chatId: chat._id,
         type: "scrim",
         scrimId,
       });
+
+      const io = eventService.getIO();
+      if (io) {
+        uniqueParticipants.forEach(userId => {
+          io.to(`user:${userId}`).emit("chatCreated", {
+            chatId: chat._id,
+            scrimId: scrimId,
+          });
+        });
+      }
 
       return chat;
     } catch (error) {
@@ -148,12 +164,8 @@ class ChatService {
     }
   }
 
-  /**
-   * Create or find DM chat between two users
-   */
   async createDMChat({ user1, user2 }) {
     try {
-      // Check if DM already exists
       const existingChat = await Chat.findOne({
         type: "dm",
         participants: { $all: [user1, user2], $size: 2 },
@@ -164,7 +176,6 @@ class ChatService {
         return existingChat;
       }
 
-      // Create new DM
       const chat = await Chat.create({
         type: "dm",
         participants: [user1, user2],
@@ -186,12 +197,8 @@ class ChatService {
     }
   }
 
-  /**
-   * Create team chat (internal team communication)
-   */
   async createTeamChat({ teamId, teamName }) {
     try {
-      // Check if team chat already exists
       const existingChat = await Chat.findOne({
         type: "team",
         "metadata.teamId": teamId,
@@ -202,7 +209,6 @@ class ChatService {
         return existingChat;
       }
 
-      // Load team
       const team = await Team.findById(teamId).populate(
         "members.user",
         "_id username avatar"
@@ -212,22 +218,12 @@ class ChatService {
         throw new Error("Team not found");
       }
 
-      // Collect all team members
-      const participants = [
-        team.owner,
-        ...team.members.map((m) => m.user._id),
-      ];
+      const participants = team.members.map((m) => m.user._id || m.user);
 
-      // Create team chat
       const chat = await Chat.create({
         type: "team",
         participants,
-        teamParticipants: [
-          {
-            team: team._id,
-            role: "member",
-          },
-        ],
+        teamParticipants: [{ team: team._id, role: "member" }],
         metadata: {
           teamId,
           teamName: team.name,
@@ -250,9 +246,6 @@ class ChatService {
     }
   }
 
-  /**
-   * Get chat by ID with full population
-   */
   async getChatById(chatId) {
     return Chat.findById(chatId)
       .populate("participants", "username avatar")
@@ -260,9 +253,6 @@ class ChatService {
       .populate("teamParticipants.team", "name logo");
   }
 
-  /**
-   * Get chat for a scrim
-   */
   async getChatByScrimId(scrimId) {
     return Chat.findOne({
       type: "scrim",
@@ -272,9 +262,6 @@ class ChatService {
       .populate("messages.sender", "username avatar");
   }
 
-  /**
-   * Determine which team a user belongs to in a chat
-   */
   determineSenderTeam(userId, chat) {
     if (chat.type !== "scrim" || !chat.metadata.teams) {
       return null;
@@ -293,9 +280,6 @@ class ChatService {
     return null;
   }
 
-  /**
-   * Get team info for a message (for frontend display)
-   */
   getTeamInfoForMessage(message, chat) {
     if (!message.senderTeam || !chat.metadata.teams) {
       return null;
@@ -325,5 +309,4 @@ class ChatService {
   }
 }
 
-// Export singleton instance
 module.exports = new ChatService();

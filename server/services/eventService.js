@@ -13,7 +13,10 @@ class EventService extends EventEmitter {
     // Log all events in development
     if (process.env.NODE_ENV === "development") {
       this.onAny((event, data) => {
-        console.log(`📢 Event: ${event}`, data ? `(${Object.keys(data).length} keys)` : "");
+        console.log(`📢 [EventService] ========== EVENT EMITTED ==========`);
+        console.log(`📢 [EventService] Event name: ${event}`);
+        console.log(`📢 [EventService] Event data:`, JSON.stringify(data, null, 2));
+        console.log(`📢 [EventService] Listener count for "${event}":`, this.listenerCount(event));
       });
     }
   }

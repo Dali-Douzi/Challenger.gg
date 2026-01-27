@@ -1,11 +1,14 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { useAuth } from './AuthContext';
+import api from '../services/apiClient';
 
 /**
  * ChatContext
- * Manages global state for floating chat windows
+ * Manages global state for floating chat windows and unread message counts
  * - Which chats are open
  * - Which chats are minimized
  * - Chat window positioning
+ * - Total unread message count across all chats
  */
 
 const ChatContext = createContext(null);
@@ -19,12 +22,44 @@ export const useChat = () => {
 };
 
 export const ChatProvider = ({ children }) => {
+  const { isAuthenticated } = useAuth();
+
   // Array of open chat windows
   // Structure: [{ scrimId, chatId, minimized, unreadCount }]
   const [openChats, setOpenChats] = useState([]);
 
+  // Total unread message count across all chats
+  const [totalUnreadCount, setTotalUnreadCount] = useState(0);
+
   // Maximum number of chat windows allowed
   const MAX_OPEN_CHATS = 3;
+
+  /**
+   * Fetch total unread message count from all chats
+   */
+  const fetchUnreadCount = useCallback(async () => {
+    if (!isAuthenticated) return;
+
+    try {
+      const response = await api.get('/api/chats');
+      if (response.chats) {
+        const total = response.chats.reduce((sum, chat) => sum + (chat.unreadCount || 0), 0);
+        setTotalUnreadCount(total);
+      }
+    } catch (error) {
+      console.error('Error fetching unread count:', error);
+    }
+  }, [isAuthenticated]);
+
+  // Fetch unread count on mount and when auth changes
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchUnreadCount();
+      // Refresh every 30 seconds
+      const interval = setInterval(fetchUnreadCount, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [isAuthenticated, fetchUnreadCount]);
 
   /**
    * Open a chat window by scrim ID
@@ -224,6 +259,8 @@ export const ChatProvider = ({ children }) => {
     getChat,
     closeAllChats,
     minimizeAllChats,
+    totalUnreadCount,
+    fetchUnreadCount,
     MAX_OPEN_CHATS,
   };
 

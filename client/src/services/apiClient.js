@@ -1,8 +1,10 @@
 export const getApiBaseUrl = () => {
-  if (import.meta.env.VITE_API_URL) {
+  // Check if VITE_API_URL is explicitly set (even if empty)
+  if (import.meta.env.VITE_API_URL !== undefined) {
+    // Empty string means use Vite proxy (relative URLs)
     return import.meta.env.VITE_API_URL;
   }
-  
+
   if (import.meta.env.MODE === 'production') {
     // Validate production environment
     if (!window.location.origin || window.location.origin.includes('localhost')) {
@@ -10,7 +12,7 @@ export const getApiBaseUrl = () => {
     }
     return window.location.origin;
   }
-  
+
   return 'http://localhost:4444';
 };
 

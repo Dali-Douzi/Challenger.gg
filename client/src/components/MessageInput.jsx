@@ -84,7 +84,7 @@ const MessageInput = ({
         disabled={disabled}
         fullWidth
         multiline
-        maxRows={3}
+        maxRows={4}
         size="small"
         variant="outlined"
         InputProps={{
@@ -93,12 +93,29 @@ const MessageInput = ({
               <IconButton
                 onClick={handleSend}
                 disabled={!message.trim() || disabled}
-                size="small"
-                color="primary"
+                size="medium"
                 sx={{
-                  transition: 'all 0.2s',
+                  background: message.trim()
+                    ? 'linear-gradient(135deg, #00FFFF 0%, #FF00FF 100%)'
+                    : 'transparent',
+                  color: message.trim() ? '#000000' : 'text.disabled',
+                  width: 36,
+                  height: 36,
+                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                  boxShadow: message.trim() ? '0 0 15px rgba(0, 255, 255, 0.5)' : 'none',
                   '&:hover': {
-                    transform: 'scale(1.1)',
+                    background: message.trim()
+                      ? 'linear-gradient(135deg, #5DFDFD 0%, #FF5DFF 100%)'
+                      : 'transparent',
+                    transform: message.trim() ? 'scale(1.1) rotate(15deg)' : 'none',
+                    boxShadow: message.trim() ? '0 0 20px rgba(0, 255, 255, 0.7)' : 'none',
+                  },
+                  '&:active': {
+                    transform: message.trim() ? 'scale(0.95)' : 'none',
+                  },
+                  '&.Mui-disabled': {
+                    background: 'transparent',
+                    color: 'text.disabled',
                   },
                 }}
               >
@@ -107,18 +124,36 @@ const MessageInput = ({
             </InputAdornment>
           ),
           sx: {
-            borderRadius: 2,
-            bgcolor: 'background.default',
+            borderRadius: '20px',
+            bgcolor: 'background.paper',
+            transition: 'all 0.2s ease',
+            '& input, & textarea': {
+              fontSize: '0.9rem',
+              color: 'text.primary',
+            },
           },
         }}
         sx={{
           '& .MuiOutlinedInput-root': {
             '& fieldset': {
-              borderColor: 'divider',
+              borderColor: 'rgba(0, 255, 255, 0.3)',
+              borderWidth: 2,
             },
             '&:hover fieldset': {
-              borderColor: 'primary.main',
+              borderColor: 'rgba(0, 255, 255, 0.5)',
+              boxShadow: '0 0 10px rgba(0, 255, 255, 0.3)',
             },
+            '&.Mui-focused fieldset': {
+              borderColor: '#00FFFF',
+              boxShadow: '0 0 15px rgba(0, 255, 255, 0.6), 0 0 5px rgba(255, 0, 255, 0.3)',
+            },
+            '&.Mui-focused': {
+              bgcolor: 'background.paper',
+            },
+          },
+          '& .MuiInputBase-input::placeholder': {
+            color: 'text.disabled',
+            opacity: 1,
           },
         }}
       />

@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node config/server.js",
     "dev": "nodemon config/server.js",
+    "cleanup": "node scripts/cleanupTestData.js",
     "migrate:add-server": "node migrations/fix-add-server.js",
     "test": "jest --watchAll --verbose",
     "test:ci": "jest --ci --coverage",

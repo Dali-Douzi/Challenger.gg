@@ -16,10 +16,21 @@ router.get(
 );
 
 // Discord OAuth routes
-router.get("/discord", passport.authenticate("discord"));
+router.get("/discord", (req, res, next) => {
+  console.log("🔵 [DISCORD-AUTH] ========== DISCORD AUTH REQUEST ==========");
+  console.log("🔵 [DISCORD-AUTH] Request received at /api/auth/discord");
+  console.log("🔵 [DISCORD-AUTH] Headers:", req.headers);
+  console.log("🔵 [DISCORD-AUTH] Initiating Discord OAuth redirect...");
+  passport.authenticate("discord")(req, res, next);
+});
 
 router.get(
   "/discord/callback",
+  (req, res, next) => {
+    console.log("🔵 [DISCORD-CALLBACK] ========== DISCORD CALLBACK ==========");
+    console.log("🔵 [DISCORD-CALLBACK] Query params:", req.query);
+    next();
+  },
   passport.authenticate("discord", { session: false }),
   oauthController.discordCallback
 );

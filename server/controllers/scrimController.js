@@ -16,15 +16,29 @@ const validateObjectId = (id, fieldName = "ID") => {
 const checkTeamPermission = (team, userId) => {
   try {
     const userIdStr = userId ? userId.toString() : null;
-    if (!userIdStr) return { isOwner: false, isManager: false, hasPermission: false };
-    
+    if (!userIdStr) {
+      console.log("❌ [PERMISSION] No userId provided");
+      return { isOwner: false, isManager: false, hasPermission: false };
+    }
+
+    console.log("🔍 [PERMISSION] Checking permissions:");
+    console.log("  - User ID:", userIdStr);
+    console.log("  - Team ID:", team._id?.toString());
+    console.log("  - Team Owner:", team.owner?.toString());
+    console.log("  - Team Members:", team.members?.map(m => ({ user: m.user?.toString(), role: m.role })));
+
     const isOwner = team.owner && team.owner.toString() === userIdStr;
     const isManager = team.members && team.members.some(
       (m) => m.user && m.user.toString() === userIdStr && m.role === "manager"
     );
+
+    console.log("  - Is Owner:", isOwner);
+    console.log("  - Is Manager:", isManager);
+    console.log("  - Has Permission:", isOwner || isManager);
+
     return { isOwner, isManager, hasPermission: isOwner || isManager };
   } catch (error) {
-    console.error("Error in checkTeamPermission:", error);
+    console.error("❌ [PERMISSION] Error in checkTeamPermission:", error);
     return { isOwner: false, isManager: false, hasPermission: false };
   }
 };
@@ -377,12 +391,14 @@ exports.requestScrim = async (req, res) => {
     scrim.requests.push(teamId);
     await scrim.save();
 
-    eventService.emitScrimRequestCreated({
+    const eventData = {
       scrimId: scrim._id,
       teamA: scrim.teamA._id,
       teamB: teamId,
       game: scrim.game._id,
-    });
+    };
+    console.log("📨 [SCRIM-CONTROLLER] Emitting scrim request event:", JSON.stringify(eventData, null, 2));
+    eventService.emitScrimRequestCreated(eventData);
 
     let chat = await Chat.findOne({
       type: "scrim",
@@ -569,6 +585,10 @@ exports.deleteScrim = async (req, res) => {
     const { scrimId } = req.params;
     const userId = req.user.userId || req.user.id;
 
+    console.log("🗑️ [DELETE-SCRIM] Delete request received");
+    console.log("  - Scrim ID:", scrimId);
+    console.log("  - User ID:", userId);
+
     validateObjectId(scrimId, "scrim ID");
 
     const scrim = await Scrim.findById(scrimId);
@@ -579,6 +599,9 @@ exports.deleteScrim = async (req, res) => {
       });
     }
 
+    console.log("🔍 [DELETE-SCRIM] Scrim found:", scrimId);
+    console.log("  - TeamA ID:", scrim.teamA?.toString());
+
     const team = await Team.findById(scrim.teamA);
     if (!team) {
       return res.status(404).json({
@@ -586,6 +609,8 @@ exports.deleteScrim = async (req, res) => {
         message: "Team not found",
       });
     }
+
+    console.log("✅ [DELETE-SCRIM] Team loaded, checking permissions...");
 
     const { hasPermission } = checkTeamPermission(team, userId);
     if (!hasPermission) {

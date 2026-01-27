@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(npm run dev:*)",
+      "Bash(timeout /t 5)",
+      "Bash(taskkill:*)",
+      "Bash(npm start)",
+      "Bash(cat:*)",
+      "Bash(npm install:*)",
+      "Bash(npx playwright:*)",
+      "Bash(npm test)",
+      "Bash(tee:*)",
+      "Bash(tasklist:*)",
+      "Bash(curl:*)",
+      "Bash(timeout /t 3)",
+      "Bash(npm test:*)",
+      "Bash(npm run cleanup:*)",
+      "Bash(node -e:*)",
+      "Bash(dir /b /s test-results*test-failed*.png)",
+      "Bash(ls:*)",
+      "Bash(node seedGames.js:*)"
+    ]
+  }
+}

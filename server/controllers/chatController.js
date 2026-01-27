@@ -102,16 +102,48 @@ exports.getChatById = async (req, res) => {
  */
 exports.getChatByScrimId = async (req, res) => {
   try {
+    console.log("🔍 [getChatByScrimId] ========== GET CHAT REQUEST ==========");
     const { scrimId } = req.params;
     const userId = req.user.userId || req.user.id;
+    console.log("🔍 [getChatByScrimId] Request params - scrimId:", scrimId);
+    console.log("🔍 [getChatByScrimId] Request userId:", userId);
+
+    // Convert scrimId to ObjectId for MongoDB query
+    const mongoose = require("mongoose");
+    const scrimObjectId = mongoose.Types.ObjectId.isValid(scrimId)
+      ? new mongoose.Types.ObjectId(scrimId)
+      : scrimId;
+
+    console.log("🔍 [getChatByScrimId] Querying for chat with:", {
+      type: "scrim",
+      "metadata.scrimId": scrimObjectId
+    });
 
     const chat = await Chat.findOne({
       type: "scrim",
-      "metadata.scrimId": scrimId,
+      "metadata.scrimId": scrimObjectId,
     })
       .populate("participants", "username avatar")
       .populate("messages.sender", "username avatar")
       .populate("teamParticipants.team", "name logo");
+
+    console.log("🔍 [getChatByScrimId] Query result - chat found:", !!chat);
+    if (chat) {
+      console.log("🔍 [getChatByScrimId] Chat details:", {
+        chatId: chat._id,
+        type: chat.type,
+        participants: chat.participants.map(p => p._id),
+        metadata: chat.metadata
+      });
+    } else {
+      console.log("❌ [getChatByScrimId] No chat found in database");
+      // Let's check what chats exist
+      const allScrimChats = await Chat.find({ type: "scrim" }, "metadata.scrimId");
+      console.log("🔍 [getChatByScrimId] All scrim chats in DB:", allScrimChats.map(c => ({
+        id: c._id,
+        scrimId: c.metadata?.scrimId
+      })));
+    }
 
     if (!chat) {
       return res.status(404).json({
@@ -124,6 +156,7 @@ exports.getChatByScrimId = async (req, res) => {
     const isParticipant = chat.participants.some(
       (p) => p._id.toString() === userId.toString()
     );
+    console.log("🔍 [getChatByScrimId] User is participant:", isParticipant);
 
     if (!isParticipant) {
       return res.status(403).json({
@@ -132,12 +165,14 @@ exports.getChatByScrimId = async (req, res) => {
       });
     }
 
+    console.log("✅ [getChatByScrimId] Returning chat successfully");
     res.json({
       success: true,
       data: chat,
     });
   } catch (error) {
-    console.error("Get chat by scrim error:", error);
+    console.error("❌ [getChatByScrimId] Error:", error);
+    console.error("❌ [getChatByScrimId] Stack:", error.stack);
     res.status(500).json({
       success: false,
       message: "Error fetching chat",
@@ -235,7 +270,7 @@ exports.sendMessage = async (req, res) => {
             chat: chat._id,
             message: `${senderUser.username} sent a message`,
             type: "message",
-            url: `/chats/${chat._id}`,
+            url: `/scrims?openChat=${chat.metadata.scrimId}`,
           });
 
           // Emit notification

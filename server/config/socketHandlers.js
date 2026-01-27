@@ -48,7 +48,12 @@ const initializeSocketHandlers = (io) => {
   // Connection handler
   io.on("connection", (socket) => {
     console.log(`🔌 User connected: ${socket.username} (${socket.id})`);
-    
+
+    // Auto-join user's personal room for direct notifications
+    const userRoom = `user:${socket.userId}`;
+    socket.join(userRoom);
+    console.log(`👤 ${socket.username} joined personal room: ${userRoom}`);
+
     // ===================
     // CHAT ROOM HANDLERS
     // ===================

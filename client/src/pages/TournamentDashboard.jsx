@@ -25,9 +25,11 @@ const TournamentDashboard = () => {
     setLoading(true);
     setError("");
     try {
-      const data = await api.get('/api/tournaments');
-      const tournamentsData = Array.isArray(data) ? data : [];
-      setTournaments(tournamentsData);
+      const response = await api.get('/api/tournaments');
+      // Handle response format: { success: true, data: [...] }
+      const tournamentsData = response.data || response || [];
+      const tournamentsArray = Array.isArray(tournamentsData) ? tournamentsData : [];
+      setTournaments(tournamentsArray);
     } catch (err) {
       setError(err.message || "Failed to load tournaments");
       setTournaments([]);

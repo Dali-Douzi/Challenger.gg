@@ -12,17 +12,17 @@ import api from './apiClient';
  * @param {number} delay - Delay between retries in ms
  * @returns {Promise<Object>} Chat data
  */
-export const getChatByScrimIdWithRetry = async (scrimId, maxRetries = 5, delay = 1000) => {
+export const getChatByScrimIdWithRetry = async (scrimId, maxRetries = 10, delay = 1500) => {
   let lastError = null;
-  
+
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       console.log(`🔍 [chatService] Fetching chat for scrim ${scrimId} (attempt ${attempt}/${maxRetries})`);
-      
+
       const response = await api.get(`/api/chats/scrim/${scrimId}`);
-      
+
       console.log(`✅ [chatService] Chat found:`, response);
-      
+
       return {
         success: true,
         data: response.data || response,
@@ -30,21 +30,22 @@ export const getChatByScrimIdWithRetry = async (scrimId, maxRetries = 5, delay =
     } catch (err) {
       lastError = err;
       console.warn(`⚠️ [chatService] Attempt ${attempt}/${maxRetries} failed:`, err.message);
-      
-      // Don't retry if it's a 404 or 403 (not found / forbidden)
-      if (err.response?.status === 404 || err.response?.status === 403) {
-        throw new Error(err.response?.data?.message || 'Chat not found for this scrim');
+
+      // For 404 errors, keep retrying because chat might still be creating
+      // Only stop retrying on 403 (forbidden - permission denied)
+      if (err.response?.status === 403) {
+        throw new Error(err.response?.data?.message || 'Access denied to this chat');
       }
-      
+
       // Wait before retrying (except on last attempt)
       if (attempt < maxRetries) {
         await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
   }
-  
+
   // If all retries failed
-  throw new Error(lastError?.response?.data?.message || lastError?.message || 'Failed to load chat after retries');
+  throw new Error(lastError?.response?.data?.message || lastError?.message || 'Chat not found - it may still be creating. Please try again in a moment.');
 };
 
 /**

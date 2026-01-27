@@ -1222,13 +1222,29 @@ const BracketPage = () => {
       try {
         setLoading(true);
         setError("");
-        
-        const tournamentData = await api.get(`/api/tournaments/${id}`);
+
+        const response = await api.get(`/api/tournaments/${id}`);
+        const tournamentData = response.data || response;
         setTournament(tournamentData);
-        
+
         const teams = tournamentData.teams || [];
         setParticipants(teams);
-        
+
+        // Fetch matches from backend
+        try {
+          const matchesResponse = await api.get(`/api/tournaments/${id}/matches`);
+          const matchesData = matchesResponse.data || matchesResponse || [];
+          const matches = Array.isArray(matchesData) ? matchesData : [];
+
+          // Convert matches to bracket components if matches exist
+          if (matches.length > 0) {
+            // TODO: Convert matches to component format
+            console.log('Loaded matches from backend:', matches);
+          }
+        } catch (matchErr) {
+          console.log('No matches found or error loading matches:', matchErr);
+        }
+
       } catch (err) {
         setError(err.message || "Failed to load tournament data");
       } finally {

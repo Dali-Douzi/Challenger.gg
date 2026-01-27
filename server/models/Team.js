@@ -87,7 +87,7 @@ teamSchema.index({ "members.user": 1 });
 
 // Virtual for member count
 teamSchema.virtual("memberCount").get(function () {
-  return this.members.length;
+  return this.members ? this.members.length : 0;
 });
 
 module.exports = mongoose.model("Team", teamSchema);

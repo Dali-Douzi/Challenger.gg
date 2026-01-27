@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   AppBar,
@@ -24,6 +24,12 @@ import {
   Paper,
   CircularProgress,
   alpha,
+  Chip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
 } from "@mui/material";
 import {
   Notifications,
@@ -38,9 +44,14 @@ import {
   CheckCircle,
   Delete,
   MarkEmailRead,
+  DeleteSweep,
 } from "@mui/icons-material";
 import { useAuth } from "../context/AuthContext";
 import { useNotifications } from "../context/NotificationContext";
+import { useChat } from "../context/ChatContext";
+import { getUserChats } from "../services/chatService";
+import { formatDistanceToNow } from "date-fns";
+import api from "../services/apiClient";
 
 const Navbar = () => {
   const navigate = useNavigate();
@@ -48,20 +59,34 @@ const Navbar = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const { user, logout } = useAuth();
-  const { 
-    notifications, 
-    unreadCount, 
+  const {
+    notifications,
+    unreadCount,
     loading: notificationsLoading,
     markAsRead,
     markAllAsRead,
     deleteNotification,
+    deleteAllRead,
   } = useNotifications();
+  const { totalUnreadCount, openChat } = useChat();
 
   const [anchorEl, setAnchorEl] = useState(null);
   const [notifAnchorEl, setNotifAnchorEl] = useState(null);
+  const [messagesAnchorEl, setMessagesAnchorEl] = useState(null);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [chats, setChats] = useState([]);
+  const [chatsLoading, setChatsLoading] = useState(false);
+  const [deleteAllDialogOpen, setDeleteAllDialogOpen] = useState(false);
   const open = Boolean(anchorEl);
   const notifOpen = Boolean(notifAnchorEl);
+  const messagesOpen = Boolean(messagesAnchorEl);
+
+  // Filter out message notifications from bell (they go to messages dropdown)
+  const bellNotifications = notifications.filter(n => n.type !== 'message');
+  const bellUnreadCount = bellNotifications.filter(n => !n.read).length;
+
+  // Calculate unread conversations count (1 per conversation with unread messages)
+  const unreadConversationsCount = chats.filter(chat => (chat.unreadCount || 0) > 0).length;
 
   const handleLogoClick = () => {
     navigate("/dashboard");
@@ -128,6 +153,83 @@ const Navbar = () => {
     e.stopPropagation();
     await deleteNotification(notificationId);
   };
+
+  const handleDeleteAllClick = () => {
+    setDeleteAllDialogOpen(true);
+  };
+
+  const handleDeleteAllConfirm = async () => {
+    await deleteAllRead();
+    setDeleteAllDialogOpen(false);
+  };
+
+  const handleDeleteAllCancel = () => {
+    setDeleteAllDialogOpen(false);
+  };
+
+  // Messages handlers
+  const handleMessagesClick = async (event) => {
+    setMessagesAnchorEl(event.currentTarget);
+    if (chats.length === 0) {
+      await fetchChats();
+    }
+  };
+
+  const handleMessagesClose = () => {
+    setMessagesAnchorEl(null);
+  };
+
+  const fetchChats = async () => {
+    setChatsLoading(true);
+    try {
+      const response = await getUserChats();
+      if (response.success) {
+        // Deduplicate chats by _id
+        const uniqueChats = (response.data || []).reduce((acc, chat) => {
+          if (!acc.find(c => c._id === chat._id)) {
+            acc.push(chat);
+          }
+          return acc;
+        }, []);
+        setChats(uniqueChats);
+      }
+    } catch (error) {
+      console.error('Failed to fetch chats:', error);
+    } finally {
+      setChatsLoading(false);
+    }
+  };
+
+  const handleChatClick = async (chat) => {
+    // Mark as read if there are unread messages
+    if ((chat.unreadCount || 0) > 0) {
+      try {
+        await api.put(`/api/chats/${chat._id}/read`);
+        // Update local state
+        setChats(prevChats =>
+          prevChats.map(c =>
+            c._id === chat._id ? { ...c, unreadCount: 0 } : c
+          )
+        );
+      } catch (error) {
+        console.error('Failed to mark chat as read:', error);
+      }
+    }
+
+    // Navigate and open chat
+    if (chat.type === 'scrim' && chat.metadata?.scrimId) {
+      navigate(`/scrims`);
+      openChat(chat.metadata.scrimId, chat._id);
+    }
+    handleMessagesClose();
+  };
+
+  // Fetch chats on mount
+  useEffect(() => {
+    if (user) {
+      fetchChats();
+    }
+  }, [user]);
 
   const navItems = [
     {
@@ -382,18 +484,18 @@ const Navbar = () => {
                   },
                 }}
               >
-                <Badge badgeContent={unreadCount} color="error">
+                <Badge badgeContent={bellUnreadCount} color="error">
                   <Notifications />
                 </Badge>
               </IconButton>
             </Tooltip>
 
-            {/* Messages - Placeholder for now */}
-            <Tooltip title="Messages (Coming Soon)">
+            {/* Messages */}
+            <Tooltip title="Messages">
               <IconButton
                 color="inherit"
                 aria-label="messages"
-                disabled
+                onClick={handleMessagesClick}
                 sx={{
                   transition: "all 0.2s ease",
                   "&:hover": {
@@ -402,7 +504,9 @@ const Navbar = () => {
                   },
                 }}
               >
-                <Message />
+                <Badge badgeContent={unreadConversationsCount} color="secondary">
+                  <Message />
+                </Badge>
               </IconButton>
             </Tooltip>
 
@@ -586,11 +690,11 @@ const Navbar = () => {
         }}
       >
         <Box sx={{ p: 2, borderBottom: "1px solid rgba(255, 255, 255, 0.1)" }}>
-          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1 }}>
             <Typography variant="h6" fontWeight={700}>
               Notifications
             </Typography>
-            {unreadCount > 0 && (
+            {bellUnreadCount > 0 && (
               <Button
                 size="small"
                 startIcon={<MarkEmailRead />}
@@ -605,6 +709,22 @@ const Navbar = () => {
               </Button>
             )}
           </Box>
+          {bellNotifications.filter(n => n.read).length > 0 && (
+            <Button
+              size="small"
+              startIcon={<DeleteSweep />}
+              onClick={handleDeleteAllClick}
+              fullWidth
+              sx={{
+                fontSize: "0.75rem",
+                textTransform: "none",
+                color: "error.main",
+                justifyContent: "flex-start",
+              }}
+            >
+              Delete all read
+            </Button>
+          )}
         </Box>
 
         <Box sx={{ maxHeight: 400, overflow: "auto" }}>
@@ -612,7 +732,7 @@ const Navbar = () => {
             <Box sx={{ display: "flex", justifyContent: "center", p: 4 }}>
               <CircularProgress size={32} />
             </Box>
-          ) : notifications.length === 0 ? (
+          ) : bellNotifications.length === 0 ? (
             <Box sx={{ p: 4, textAlign: "center" }}>
               <Notifications sx={{ fontSize: 48, color: "text.disabled", mb: 1 }} />
               <Typography variant="body2" color="text.secondary">
@@ -621,7 +741,7 @@ const Navbar = () => {
             </Box>
           ) : (
             <List sx={{ p: 0 }}>
-              {notifications.slice(0, 10).map((notification) => (
+              {bellNotifications.slice(0, 10).map((notification) => (
                 <ListItemButton
                   key={notification._id}
                   onClick={() => handleNotificationItemClick(notification)}
@@ -669,7 +789,7 @@ const Navbar = () => {
           )}
         </Box>
 
-        {notifications.length > 10 && (
+        {bellNotifications.length > 10 && (
           <Box sx={{ p: 2, borderTop: "1px solid rgba(255, 255, 255, 0.1)", textAlign: "center" }}>
             <Button
               size="small"
@@ -683,6 +803,167 @@ const Navbar = () => {
               }}
             >
               View all notifications
+            </Button>
+          </Box>
+        )}
+      </Popover>
+
+      {/* Messages Popover */}
+      <Popover
+        open={messagesOpen}
+        anchorEl={messagesAnchorEl}
+        onClose={handleMessagesClose}
+        anchorOrigin={{
+          vertical: "bottom",
+          horizontal: "right",
+        }}
+        transformOrigin={{
+          vertical: "top",
+          horizontal: "right",
+        }}
+        sx={{
+          mt: 1.5,
+          "& .MuiPaper-root": {
+            width: 380,
+            maxHeight: 500,
+            borderRadius: 3,
+            boxShadow: "0px 12px 32px rgba(0,0,0,0.5)",
+            border: "1px solid rgba(255, 255, 255, 0.1)",
+            backdropFilter: "blur(10px)",
+            backgroundColor: "rgba(18, 18, 18, 0.95)",
+          },
+        }}
+      >
+        <Box sx={{ p: 2, borderBottom: "1px solid rgba(255, 255, 255, 0.1)" }}>
+          <Typography variant="h6" fontWeight={700}>
+            Messages
+          </Typography>
+        </Box>
+
+        <Box sx={{ maxHeight: 400, overflow: "auto" }}>
+          {chatsLoading ? (
+            <Box sx={{ display: "flex", justifyContent: "center", p: 4 }}>
+              <CircularProgress size={32} />
+            </Box>
+          ) : chats.length === 0 ? (
+            <Box sx={{ p: 4, textAlign: "center" }}>
+              <Message sx={{ fontSize: 48, color: "text.disabled", mb: 1 }} />
+              <Typography variant="body2" color="text.secondary">
+                No messages yet
+              </Typography>
+            </Box>
+          ) : (
+            <List sx={{ p: 0 }}>
+              {chats.slice(0, 10).filter(chat => {
+                // Only show chats with messages
+                const lastMessage = chat.messages?.[chat.messages.length - 1];
+                return lastMessage && (lastMessage.text || lastMessage.content);
+              }).map((chat) => {
+                const lastMessage = chat.messages?.[chat.messages.length - 1];
+                const unreadCount = chat.unreadCount || 0;
+
+                // Get chat title based on type
+                const getChatTitle = () => {
+                  if (chat.type === 'scrim' && chat.metadata?.teams) {
+                    const { host, challenger } = chat.metadata.teams;
+                    return `${host.name} vs ${challenger.name}`;
+                  }
+                  return 'Chat';
+                };
+
+                return (
+                  <ListItemButton
+                    key={chat._id}
+                    onClick={() => handleChatClick(chat)}
+                    sx={{
+                      py: 2,
+                      px: 2,
+                      borderBottom: "1px solid rgba(255, 255, 255, 0.05)",
+                      backgroundColor: unreadCount > 0 ? alpha(theme.palette.secondary.main, 0.05) : "transparent",
+                      "&:hover": {
+                        backgroundColor: alpha(theme.palette.secondary.main, 0.1),
+                      },
+                    }}
+                  >
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 0.5 }}>
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            fontWeight: unreadCount > 0 ? 600 : 400,
+                            color: unreadCount > 0 ? "text.primary" : "text.secondary",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {getChatTitle()}
+                        </Typography>
+                        {unreadCount > 0 && (
+                          <Chip
+                            label={unreadCount}
+                            size="small"
+                            sx={{
+                              height: 20,
+                              minWidth: 20,
+                              bgcolor: theme.palette.secondary.main,
+                              color: "white",
+                              fontSize: "0.7rem",
+                              fontWeight: 700,
+                            }}
+                          />
+                        )}
+                      </Box>
+
+                      {lastMessage && (
+                        <>
+                          <Typography
+                            variant="caption"
+                            sx={{
+                              color: "text.secondary",
+                              display: "block",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                              mb: 0.5,
+                            }}
+                          >
+                            {lastMessage.sender?.username}: {lastMessage.text || lastMessage.content}
+                          </Typography>
+                          <Typography
+                            variant="caption"
+                            sx={{
+                              color: "text.disabled",
+                              fontSize: "0.65rem",
+                            }}
+                          >
+                            {formatDistanceToNow(new Date(lastMessage.timestamp || lastMessage.createdAt), { addSuffix: true })}
+                          </Typography>
+                        </>
+                      )}
+                    </Box>
+                  </ListItemButton>
+                );
+              })}
+            </List>
+          )}
+        </Box>
+
+        {chats.length > 10 && (
+          <Box sx={{ p: 2, borderTop: "1px solid rgba(255, 255, 255, 0.1)", textAlign: "center" }}>
+            <Button
+              size="small"
+              onClick={() => {
+                navigate('/scrims');
+                handleMessagesClose();
+              }}
+              sx={{
+                fontSize: "0.75rem",
+                textTransform: "none",
+                color: "secondary.main",
+              }}
+            >
+              View all messages
             </Button>
           </Box>
         )}
@@ -708,6 +989,40 @@ const Navbar = () => {
       >
         {drawer}
       </Drawer>
+
+      {/* Delete All Confirmation Dialog */}
+      <Dialog
+        open={deleteAllDialogOpen}
+        onClose={handleDeleteAllCancel}
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            bgcolor: 'background.paper',
+          },
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 700 }}>
+          Delete All Read Notifications?
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ color: 'text.secondary' }}>
+            This will permanently delete all read notifications. This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, gap: 1 }}>
+          <Button onClick={handleDeleteAllCancel} sx={{ textTransform: 'none' }}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleDeleteAllConfirm}
+            variant="contained"
+            color="error"
+            sx={{ textTransform: 'none' }}
+          >
+            Delete All
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 };

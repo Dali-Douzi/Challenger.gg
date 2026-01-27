@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Box,
   Button,
@@ -43,6 +43,7 @@ const getTeamInitials = (teamName) => {
 
 const ScrimDashboard = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user, isAuthenticated } = useAuth();
   const theme = useTheme();
   const { openChat } = useChat();
@@ -219,6 +220,13 @@ const ScrimDashboard = () => {
         scrimsArray = responseData;
       }
 
+      // Filter out scrims that are more than 1 hour in the past
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      scrimsArray = scrimsArray.filter(scrim => {
+        const scrimTime = new Date(scrim.scheduledTime);
+        return scrimTime > oneHourAgo;
+      });
+
       setScrims(scrimsArray);
       
     } catch (err) {
@@ -254,6 +262,18 @@ const ScrimDashboard = () => {
       .map((s) => s._id);
     setRequested(persisted);
   }, [scrims, selectedTeam]);
+
+  // Handle openChat query parameter from notifications
+  useEffect(() => {
+    const scrimIdToOpen = searchParams.get('openChat');
+    if (scrimIdToOpen) {
+      console.log('💬 Opening chat for scrim:', scrimIdToOpen);
+      openChat(scrimIdToOpen);
+      // Remove the query parameter
+      searchParams.delete('openChat');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams, openChat]);
 
   const getDayOptions = () => {
     const opts = ["Today", "Tomorrow"];
@@ -342,7 +362,7 @@ const ScrimDashboard = () => {
     if (!selectedRequestTeam || requested.includes(scrimId)) return;
 
     setRequested((prev) => [...prev, scrimId]);
-    
+
     try {
       const response = await api.post(`/api/scrims/request/${scrimId}`, {
         teamId: selectedRequestTeam
@@ -362,6 +382,42 @@ const ScrimDashboard = () => {
       }
       alert(err.message);
       setRequested((prev) => prev.filter((id) => id !== scrimId));
+    }
+  };
+
+  const handleAcceptRequest = async (scrimId, teamId) => {
+    try {
+      const response = await api.put(`/api/scrims/accept/${scrimId}`, {
+        teamId: teamId
+      });
+
+      if (response.success) {
+        console.log('✅ Scrim request accepted successfully');
+        // Refresh scrims to show updated status
+        await fetchScrims();
+        // Open chat
+        if (response.chatId) {
+          openChat(scrimId);
+        }
+      }
+    } catch (err) {
+      alert(err.message || 'Failed to accept scrim request');
+    }
+  };
+
+  const handleDeclineRequest = async (scrimId, teamId) => {
+    try {
+      const response = await api.put(`/api/scrims/decline/${scrimId}`, {
+        teamId: teamId
+      });
+
+      if (response.success) {
+        console.log('✅ Scrim request declined successfully');
+        // Refresh scrims to show updated status
+        await fetchScrims();
+      }
+    } catch (err) {
+      alert(err.message || 'Failed to decline scrim request');
     }
   };
 
@@ -952,44 +1008,78 @@ const ScrimDashboard = () => {
                                 minWidth: isMyScrim ? 240 : 140,
                               }}
                             >
-                              {isMyScrim ? (
+                              {scrim.status === "booked" ? (
+                                <Chip
+                                  label="BOOKED"
+                                  size="small"
+                                  sx={{
+                                    bgcolor: alpha(theme.palette.success.main, 0.2),
+                                    color: theme.palette.success.main,
+                                    fontWeight: 700,
+                                    border: `1px solid ${alpha(theme.palette.success.main, 0.5)}`,
+                                    minWidth: 120,
+                                  }}
+                                />
+                              ) : isMyScrim ? (
                                 <>
-                                  <Button
-                                    size="small"
-                                    variant="outlined"
-                                    onClick={() =>
-                                      navigate(`/scrims/${scrim._id}/requests`)
-                                    }
-                                    sx={{
-                                      borderColor: theme.palette.info.main,
-                                      color: theme.palette.info.main,
-                                      fontWeight: 600,
-                                      whiteSpace: "nowrap",
-                                      "&:hover": {
-                                        borderColor: theme.palette.info.light,
-                                        bgcolor: alpha(theme.palette.info.main, 0.1),
-                                      },
-                                    }}
-                                  >
-                                    View Requests
-                                  </Button>
-                                  <Button
-                                    size="small"
-                                    variant="outlined"
-                                    onClick={() => handleEditScrim(scrim._id)}
-                                    sx={{
-                                      borderColor: theme.palette.warning.main,
-                                      color: theme.palette.warning.main,
-                                      fontWeight: 600,
-                                      whiteSpace: "nowrap",
-                                      "&:hover": {
-                                        borderColor: theme.palette.warning.light,
-                                        bgcolor: alpha(theme.palette.warning.main, 0.1),
-                                      },
-                                    }}
-                                  >
-                                    Edit
-                                  </Button>
+                                  {scrim.requests && scrim.requests.length > 0 ? (
+                                    <>
+                                      <Chip
+                                        label={`${scrim.requests.length} Request${scrim.requests.length > 1 ? 's' : ''}`}
+                                        size="small"
+                                        sx={{
+                                          bgcolor: alpha(theme.palette.info.main, 0.2),
+                                          color: theme.palette.info.main,
+                                          fontWeight: 700,
+                                          border: `1px solid ${alpha(theme.palette.info.main, 0.5)}`,
+                                          mr: 1,
+                                        }}
+                                      />
+                                      <Button
+                                        size="small"
+                                        variant="contained"
+                                        onClick={() => handleAcceptRequest(scrim._id, scrim.requests[0]._id || scrim.requests[0])}
+                                        sx={{
+                                          bgcolor: theme.palette.success.main,
+                                          color: 'white',
+                                          fontWeight: 600,
+                                          whiteSpace: "nowrap",
+                                          "&:hover": {
+                                            bgcolor: theme.palette.success.dark,
+                                          },
+                                        }}
+                                      >
+                                        Accept
+                                      </Button>
+                                      <Button
+                                        size="small"
+                                        variant="outlined"
+                                        onClick={() => handleDeclineRequest(scrim._id, scrim.requests[0]._id || scrim.requests[0])}
+                                        sx={{
+                                          borderColor: theme.palette.error.main,
+                                          color: theme.palette.error.main,
+                                          fontWeight: 600,
+                                          whiteSpace: "nowrap",
+                                          "&:hover": {
+                                            borderColor: theme.palette.error.light,
+                                            bgcolor: alpha(theme.palette.error.main, 0.1),
+                                          },
+                                        }}
+                                      >
+                                        Decline
+                                      </Button>
+                                    </>
+                                  ) : (
+                                    <Chip
+                                      label="No Requests"
+                                      size="small"
+                                      sx={{
+                                        bgcolor: alpha(theme.palette.text.disabled, 0.1),
+                                        color: theme.palette.text.disabled,
+                                        fontWeight: 600,
+                                      }}
+                                    />
+                                  )}
                                 </>
                               ) : isRequested ? (
                                 <Button

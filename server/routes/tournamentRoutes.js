@@ -22,6 +22,7 @@ async function isOrganizer(req, res, next) {
 }
 
 router.get("/", tournamentController.listTournaments);
+router.get("/code/:code", tournamentController.getTournamentByCode);
 router.get("/:id", tournamentController.getTournament);
 
 router.post("/", protect, tournamentController.createTournament);
@@ -88,5 +89,9 @@ router.put(
   isOrganizer,
   tournamentController.updateBracket
 );
+
+// Match routes
+router.get("/:id/matches", tournamentController.getMatches);
+router.put("/:id/matches/:matchId", protect, tournamentController.updateMatch);
 
 module.exports = router;

@@ -71,7 +71,9 @@ const TournamentPage = () => {
     setTournamentError("");
     try {
       const response = await api.get(`/api/tournaments/${id}`);
-      setTournament(response.data);
+      // Handle response format: { success: true, data: {...} }
+      const tournamentData = response.data || response;
+      setTournament(tournamentData);
     } catch (err) {
       setTournamentError(err.response?.data?.message || "Failed to load tournament");
     } finally {
@@ -82,12 +84,15 @@ const TournamentPage = () => {
   // Fetch my teams data
   const fetchMyTeams = async () => {
     if (!currentUser) return;
-    
+
     setLoadingMyTeams(true);
     setMyTeamsError("");
     try {
       const response = await api.get("/api/teams/my");
-      setMyTeams(response.data);
+      // Handle response format: { success: true, data: [...] }
+      const teamsData = response.data || response || [];
+      const teamsArray = Array.isArray(teamsData) ? teamsData : [];
+      setMyTeams(teamsArray);
     } catch (err) {
       setMyTeamsError(err.response?.data?.message || "Failed to load teams");
     } finally {
@@ -171,7 +176,7 @@ const TournamentPage = () => {
     setPageError("");
 
     try {
-      await api.post(`api/tournaments/${id}/teams`, {
+      await api.post(`/api/tournaments/${id}/teams`, {
         teamId: selectedTeamToJoin,
       });
 
@@ -468,7 +473,7 @@ const TournamentPage = () => {
                 )
               ) {
                 try {
-                  await api.delete(`api/tournaments/${id}`);
+                  await api.delete(`/api/tournaments/${id}`);
                   setSuccessMessage("Tournament cancelled successfully");
                   setTimeout(() => navigate("/tournaments"), 2000);
                 } catch (err) {
@@ -495,7 +500,7 @@ const TournamentPage = () => {
               ) {
                 try {
                   await api.delete(
-                    `api/tournaments/${id}/referees/${currentUser._id}`
+                    `/api/tournaments/${id}/referees/${currentUser._id}`
                   );
                   setSuccessMessage("You have quit as referee");
                   await fetchTournament(); // Refresh tournament data

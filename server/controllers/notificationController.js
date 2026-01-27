@@ -19,7 +19,7 @@ exports.getNotifications = async (req, res) => {
     // Build query
     const query = { team: { $in: teamIds } };
     if (unreadOnly === "true") {
-      query.isRead = false;
+      query.read = false;
     }
 
     const notifications = await Notification.find(query)
@@ -31,7 +31,7 @@ exports.getNotifications = async (req, res) => {
 
     const unreadCount = await Notification.countDocuments({
       team: { $in: teamIds },
-      isRead: false,
+      read: false,
     });
 
     res.json({
@@ -88,7 +88,7 @@ exports.markAsRead = async (req, res) => {
       });
     }
 
-    notification.isRead = true;
+    notification.read = true;
     await notification.save();
 
     res.json({
@@ -125,10 +125,10 @@ exports.markAllAsRead = async (req, res) => {
     const result = await Notification.updateMany(
       {
         team: { $in: teamIds },
-        isRead: false,
+        read: false,
       },
       {
-        $set: { isRead: true },
+        $set: { read: true },
       }
     );
 
@@ -219,7 +219,7 @@ exports.deleteAllRead = async (req, res) => {
 
     const result = await Notification.deleteMany({
       team: { $in: teamIds },
-      isRead: true,
+      read: true,
     });
 
     res.json({
@@ -255,7 +255,7 @@ exports.getUnreadCount = async (req, res) => {
 
     const unreadCount = await Notification.countDocuments({
       team: { $in: teamIds },
-      isRead: false,
+      read: false,
     });
 
     res.json({

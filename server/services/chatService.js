@@ -9,7 +9,9 @@ const eventService = require("./eventService");
  */
 class ChatService {
   constructor() {
+    console.log("🚀 [ChatService] Constructor called - initializing service");
     this.setupEventListeners();
+    console.log("🚀 [ChatService] Constructor complete");
   }
 
   /**
@@ -20,10 +22,14 @@ class ChatService {
     // This allows teams to communicate BEFORE accepting
     eventService.on("scrim:request_created", async (data) => {
       try {
-        console.log("📨 [CHAT-SERVICE] Scrim request created, creating chat:", data.scrimId);
-        await this.createScrimChat(data);
+        console.log("📨 [CHAT-SERVICE] ========== SCRIM REQUEST EVENT RECEIVED ==========");
+        console.log("📨 [CHAT-SERVICE] Event data:", JSON.stringify(data, null, 2));
+        console.log("📨 [CHAT-SERVICE] Creating chat for scrim:", data.scrimId);
+        const chat = await this.createScrimChat(data);
+        console.log("✅ [CHAT-SERVICE] Chat created successfully:", chat._id);
       } catch (error) {
         console.error("❌ [CHAT-SERVICE] Error creating scrim chat:", error);
+        console.error("❌ [CHAT-SERVICE] Error stack:", error.stack);
       }
     });
 
@@ -77,15 +83,20 @@ class ChatService {
    */
   async createScrimChat({ scrimId, teamA, teamB, game }) {
     try {
+      console.log(`📨 [createScrimChat] Starting chat creation for scrim: ${scrimId}`);
+      console.log(`📨 [createScrimChat] Teams - Host: ${teamA}, Challenger: ${teamB}`);
+
       const existingChat = await Chat.findOne({
         type: "scrim",
         "metadata.scrimId": scrimId,
       });
 
       if (existingChat) {
-        console.log(`💬 Scrim chat already exists for scrim ${scrimId}`);
+        console.log(`💬 [createScrimChat] Scrim chat already exists: ${existingChat._id}`);
         return existingChat;
       }
+
+      console.log(`📨 [createScrimChat] No existing chat found, creating new one...`);
 
       const hostTeam = await Team.findById(teamA).populate(
         "members.user",

@@ -70,13 +70,47 @@ function nextPowerOfTwo(n) {
   return 2 ** Math.ceil(Math.log2(n));
 }
 
+function seedTeamsInBracket(teams, bracketType) {
+  // Standard seeding: 1 vs lowest, 2 vs 2nd lowest, etc.
+  const seededTeams = [...teams];
+  const totalSlots = nextPowerOfTwo(teams.length);
+
+  // For single/double elimination, create proper seeding
+  if (bracketType === "SINGLE_ELIM" || bracketType === "DOUBLE_ELIM") {
+    const firstRoundMatches = Math.ceil(teams.length / 2);
+    const seeds = [];
+
+    // Pair teams: 1 vs lowest seed, 2 vs 2nd lowest, etc.
+    for (let i = 0; i < firstRoundMatches; i++) {
+      const topSeed = seededTeams[i];
+      const bottomSeed = seededTeams[teams.length - 1 - i] || null;
+      seeds.push({ teamA: topSeed, teamB: bottomSeed });
+    }
+
+    return seeds;
+  }
+
+  // For round robin, pair all teams
+  if (bracketType === "ROUND_ROBIN") {
+    const pairs = [];
+    for (let i = 0; i < teams.length; i++) {
+      for (let j = i + 1; j < teams.length; j++) {
+        pairs.push({ teamA: teams[i], teamB: teams[j] });
+      }
+    }
+    return pairs;
+  }
+
+  return [];
+}
+
 function makeBracketTemplate(teamsCount, bracketType) {
   switch (bracketType) {
     case "SINGLE_ELIM": {
       const slots = nextPowerOfTwo(teamsCount);
       const result = [];
       for (let i = 0; i < slots - 1; i++) {
-        result.push({ slot: i, teamA: null, teamB: null });
+        result.push({ slot: i, teamA: null, teamB: null, roundNumber: 0 });
       }
       return result;
     }
@@ -86,13 +120,15 @@ function makeBracketTemplate(teamsCount, bracketType) {
       const winnersCount = slots - 1;
       const losersCount = winnersCount;
       for (let i = 0; i < winnersCount; i++) {
-        result.push({ slot: i, teamA: null, teamB: null });
+        result.push({ slot: i, teamA: null, teamB: null, roundNumber: 0, bracketPosition: "winners" });
       }
       for (let i = 0; i < losersCount; i++) {
         result.push({
           slot: winnersCount + i,
           teamA: null,
           teamB: null,
+          roundNumber: 0,
+          bracketPosition: "losers",
         });
       }
       return result;
@@ -102,7 +138,7 @@ function makeBracketTemplate(teamsCount, bracketType) {
       let slot = 0;
       for (let i = 0; i < teamsCount; i++) {
         for (let j = i + 1; j < teamsCount; j++) {
-          result.push({ slot: slot++, teamA: null, teamB: null });
+          result.push({ slot: slot++, teamA: null, teamB: null, roundNumber: 0 });
         }
       }
       return result;
@@ -135,6 +171,50 @@ exports.listTournaments = async (req, res) => {
     });
   } catch (err) {
     console.error("Error listing tournaments:", err);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+      ...(process.env.NODE_ENV === "development" && {
+        error: err.message,
+      }),
+    });
+  }
+};
+
+/**
+ * @desc    Get tournament by referee code
+ * @route   GET /api/tournaments/code/:code
+ * @access  Public
+ */
+exports.getTournamentByCode = async (req, res) => {
+  try {
+    const tourney = await Tournament.findOne({ refereeCode: req.params.code })
+      .populate("organizer", "username")
+      .populate("teams", "name logo")
+      .populate("pendingTeams", "name logo")
+      .populate("referees", "username");
+
+    if (!tourney) {
+      return res.status(404).json({
+        success: false,
+        message: "Tournament not found with that referee code",
+      });
+    }
+
+    const obj = tourney.toObject();
+    obj.isOrganizer = req.user
+      ? tourney.organizer._id.toString() === req.user.userId
+      : false;
+    obj.isReferee = req.user
+      ? tourney.referees.some((r) => r._id.toString() === req.user.userId)
+      : false;
+
+    res.json({
+      success: true,
+      data: obj,
+    });
+  } catch (err) {
+    console.error("Error fetching tournament by code:", err);
     res.status(500).json({
       success: false,
       message: "Server error",
@@ -288,6 +368,14 @@ exports.updateTournament = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: "Tournament not found",
+      });
+    }
+
+    // Authorization check - only organizer can update
+    if (tourney.organizer.toString() !== req.user.userId) {
+      return res.status(403).json({
+        success: false,
+        message: "Only the tournament organizer can update this tournament",
       });
     }
 
@@ -451,21 +539,44 @@ exports.lockBracket = async (req, res) => {
     tourney.status = "BRACKET_LOCKED";
     await tourney.save();
 
-    // Delete existing matches and generate new ones
+    // Delete existing matches and generate new ones with seeded teams
     await Match.deleteMany({ tournament: req.params.id });
+
     for (let idx = 0; idx < tourney.phases.length; idx++) {
       const phase = tourney.phases[idx];
+
+      // Get seeded matchups for first round
+      const seededPairs = seedTeamsInBracket(tourney.teams, phase.bracketType);
       const template = makeBracketTemplate(
         tourney.teams.length,
         phase.bracketType
       );
-      const docs = template.map((m) => ({
-        tournament: tourney._id,
-        phaseIndex: idx,
-        slot: m.slot,
-        teamA: m.teamA,
-        teamB: m.teamB,
-      }));
+
+      // Assign teams to first round matches
+      const docs = template.map((m, index) => {
+        const matchData = {
+          tournament: tourney._id,
+          phaseIndex: idx,
+          slot: m.slot,
+          teamA: m.teamA,
+          teamB: m.teamB,
+          roundNumber: m.roundNumber || 0,
+        };
+
+        // Seed first round matches
+        if (index < seededPairs.length) {
+          matchData.teamA = seededPairs[index].teamA;
+          matchData.teamB = seededPairs[index].teamB;
+          matchData.seed = index + 1;
+        }
+
+        if (m.bracketPosition) {
+          matchData.bracketPosition = m.bracketPosition;
+        }
+
+        return matchData;
+      });
+
       await Match.insertMany(docs);
     }
 
@@ -986,6 +1097,111 @@ exports.getBracketTemplate = async (req, res) => {
     });
   } catch (err) {
     console.error("Error getting bracket template:", err);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+      ...(process.env.NODE_ENV === "development" && {
+        error: err.message,
+      }),
+    });
+  }
+};
+
+/**
+ * @desc    Get all matches for a tournament
+ * @route   GET /api/tournaments/:id/matches
+ * @access  Public
+ */
+exports.getMatches = async (req, res) => {
+  try {
+    const matches = await Match.find({ tournament: req.params.id })
+      .populate("teamA", "name logo")
+      .populate("teamB", "name logo")
+      .populate("winner", "name logo")
+      .populate("loser", "name logo")
+      .sort({ phaseIndex: 1, roundNumber: 1, slot: 1 });
+
+    res.json({
+      success: true,
+      count: matches.length,
+      data: matches,
+    });
+  } catch (err) {
+    console.error("Error fetching matches:", err);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+      ...(process.env.NODE_ENV === "development" && {
+        error: err.message,
+      }),
+    });
+  }
+};
+
+/**
+ * @desc    Update a single match (submit result)
+ * @route   PUT /api/tournaments/:id/matches/:matchId
+ * @access  Private (Organizer or Referee)
+ */
+exports.updateMatch = async (req, res) => {
+  try {
+    const { scoreA, scoreB, winner, status } = req.body;
+
+    const match = await Match.findById(req.params.matchId);
+    if (!match) {
+      return res.status(404).json({
+        success: false,
+        message: "Match not found",
+      });
+    }
+
+    const tourney = await Tournament.findById(req.params.id);
+    if (!tourney) {
+      return res.status(404).json({
+        success: false,
+        message: "Tournament not found",
+      });
+    }
+
+    // Authorization check
+    const userId = req.user.userId;
+    const isOrganizer = tourney.organizer.toString() === userId;
+    const isReferee = tourney.referees.some((r) => r.toString() === userId);
+
+    if (!isOrganizer && !isReferee) {
+      return res.status(403).json({
+        success: false,
+        message: "Only organizer or referees can update matches",
+      });
+    }
+
+    // Update match fields
+    if (scoreA !== undefined) match.scoreA = scoreA;
+    if (scoreB !== undefined) match.scoreB = scoreB;
+    if (winner) {
+      match.winner = winner;
+      // Set loser as the other team
+      if (match.teamA && match.teamB) {
+        match.loser = winner.toString() === match.teamA.toString() ? match.teamB : match.teamA;
+      }
+    }
+    if (status) match.status = status;
+
+    await match.save();
+
+    const populatedMatch = await Match.findById(match._id)
+      .populate("teamA", "name logo")
+      .populate("teamB", "name logo")
+      .populate("winner", "name logo")
+      .populate("loser", "name logo");
+
+    res.json({
+      success: true,
+      message: "Match updated successfully",
+      data: populatedMatch,
+    });
+  } catch (err) {
+    console.error("Error updating match:", err);
     res.status(500).json({
       success: false,
       message: "Server error",

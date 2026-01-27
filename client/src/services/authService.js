@@ -1,6 +1,10 @@
-import api from './apiClient';
+import api, { getApiBaseUrl } from './apiClient';
 
 export const authService = {
+  getOAuthUrl: (provider) => {
+    return `${getApiBaseUrl()}/api/auth/${provider}`;
+  },
+
   checkAuth: async () => {
     try {
       return await api.get('/api/auth/me');

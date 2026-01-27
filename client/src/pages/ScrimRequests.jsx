@@ -100,42 +100,11 @@ const ScrimRequests = () => {
           chatId = response.chatId;
         }
         
-        if (chatId) {
-          console.log("✅ [REQUESTS] Found chatId:", chatId);
-          // Navigate to chat after a short delay to ensure backend operations complete
-          setTimeout(() => {
-            navigate(`/chats/${chatId}`, { replace: true });
-          }, 500);
-        } else {
-          console.warn("⚠️ [REQUESTS] No chatId in response, trying fallback...");
-          
-          // Fallback: Try to fetch the chat manually after a delay
-          setTimeout(async () => {
-            try {
-              console.log("🔍 [REQUESTS] Attempting to fetch chat by scrimId...");
-              const chatResponse = await api.get(`/api/chats/scrim/${scrimId}`);
-              console.log("🔍 [REQUESTS] Chat fetch response:", chatResponse);
-              
-              let fetchedChat = null;
-              if (chatResponse && chatResponse.success && chatResponse.data) {
-                fetchedChat = chatResponse.data;
-              } else if (chatResponse && chatResponse._id) {
-                fetchedChat = chatResponse;
-              }
-              
-              if (fetchedChat && fetchedChat._id) {
-                console.log("✅ [REQUESTS] Found chat via fallback:", fetchedChat._id);
-                navigate(`/chats/${fetchedChat._id}`, { replace: true });
-              } else {
-                throw new Error("Chat not found in fallback");
-              }
-            } catch (fallbackErr) {
-              console.error("❌ [REQUESTS] Fallback chat fetch failed:", fallbackErr);
-              alert("Scrim accepted successfully! Please check your chats page.");
-              navigate('/chats');
-            }
-          }, 1000);
-        }
+        // Navigate to scrim dashboard after accepting
+        console.log("✅ [REQUESTS] Scrim accepted, navigating to dashboard");
+        setTimeout(() => {
+          navigate('/scrims', { replace: true });
+        }, 500);
       } else {
         // For decline action, show success
         console.log("✅ [REQUESTS] Decline successful");

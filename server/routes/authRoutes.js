@@ -17,7 +17,7 @@ cloudinary.config({
 // Rate limiter for auth routes
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 5,
+  max: process.env.NODE_ENV === 'production' ? 5 : 100, // Higher limit for dev/test
   message: {
     success: false,
     message: "Too many authentication attempts, please try again later.",

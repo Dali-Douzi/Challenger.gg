@@ -97,24 +97,30 @@ const MessageList = ({ messages, chat, typingUsers = [] }) => {
         height: '100%',
         overflowY: 'auto',
         overflowX: 'hidden',
-        px: 2,
-        py: 1,
+        px: 2.5,
+        py: 2,
         display: 'flex',
         flexDirection: 'column',
-        gap: 1,
+        gap: 0.5,
+        bgcolor: 'background.default',
         // Custom scrollbar
         '&::-webkit-scrollbar': {
-          width: '6px',
+          width: '8px',
         },
         '&::-webkit-scrollbar-track': {
           background: 'transparent',
+          margin: '8px 0',
         },
         '&::-webkit-scrollbar-thumb': {
-          background: '#888',
-          borderRadius: '3px',
+          background: 'linear-gradient(180deg, #00FFFF 0%, #FF00FF 100%)',
+          borderRadius: '10px',
+          border: '2px solid transparent',
+          backgroundClip: 'padding-box',
+          transition: 'all 0.2s',
         },
         '&::-webkit-scrollbar-thumb:hover': {
-          background: '#555',
+          background: 'linear-gradient(180deg, #5DFDFD 0%, #FF5DFF 100%)',
+          backgroundClip: 'padding-box',
         },
       }}
     >
@@ -123,14 +129,52 @@ const MessageList = ({ messages, chat, typingUsers = [] }) => {
         <Box
           sx={{
             display: 'flex',
+            flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
             height: '100%',
-            color: 'text.secondary',
+            gap: 2,
+            animation: 'fadeInUp 0.5s ease-out',
+            '@keyframes fadeInUp': {
+              from: { opacity: 0, transform: 'translateY(20px)' },
+              to: { opacity: 1, transform: 'translateY(0)' },
+            },
           }}
         >
-          <Typography variant="body2">
-            No messages yet. Start the conversation!
+          <Box
+            sx={{
+              width: 80,
+              height: 80,
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, #00FFFF 0%, #FF00FF 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 8px 24px rgba(0, 255, 255, 0.5), 0 0 40px rgba(255, 0, 255, 0.3)',
+            }}
+          >
+            <Typography variant="h3" sx={{ fontSize: '2.5rem' }}>
+              💬
+            </Typography>
+          </Box>
+          <Typography
+            variant="body2"
+            sx={{
+              color: 'text.secondary',
+              fontWeight: 500,
+              textAlign: 'center',
+            }}
+          >
+            No messages yet
+          </Typography>
+          <Typography
+            variant="caption"
+            sx={{
+              color: 'text.disabled',
+              fontSize: '0.75rem',
+            }}
+          >
+            Start the conversation!
           </Typography>
         </Box>
       )}
@@ -144,23 +188,42 @@ const MessageList = ({ messages, chat, typingUsers = [] }) => {
               sx={{
                 display: 'flex',
                 justifyContent: 'center',
-                my: 2,
+                alignItems: 'center',
+                my: 3,
+                gap: 2,
               }}
             >
+              <Box
+                sx={{
+                  flex: 1,
+                  height: '1px',
+                  background: 'linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.1) 50%, transparent 100%)',
+                }}
+              />
               <Typography
                 variant="caption"
                 sx={{
-                  bgcolor: 'background.paper',
-                  px: 2,
-                  py: 0.5,
-                  borderRadius: 1,
-                  color: 'text.secondary',
+                  bgcolor: 'rgba(0, 255, 255, 0.15)',
+                  px: 2.5,
+                  py: 0.75,
+                  borderRadius: '12px',
+                  color: '#00FFFF',
                   fontSize: '0.7rem',
-                  fontWeight: 500,
+                  fontWeight: 600,
+                  boxShadow: '0 2px 15px rgba(0, 255, 255, 0.4)',
+                  border: '1px solid rgba(0, 255, 255, 0.4)',
+                  letterSpacing: '0.02em',
                 }}
               >
                 {item.date}
               </Typography>
+              <Box
+                sx={{
+                  flex: 1,
+                  height: '1px',
+                  background: 'linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.1) 50%, transparent 100%)',
+                }}
+              />
             </Box>
           );
         }
@@ -181,65 +244,97 @@ const MessageList = ({ messages, chat, typingUsers = [] }) => {
           sx={{
             display: 'flex',
             alignItems: 'center',
-            gap: 1,
+            gap: 1.5,
             py: 1,
+            animation: 'fadeIn 0.3s ease-in',
+            '@keyframes fadeIn': {
+              from: { opacity: 0, transform: 'translateY(10px)' },
+              to: { opacity: 1, transform: 'translateY(0)' },
+            },
           }}
         >
           <Box
             sx={{
               display: 'flex',
-              gap: 0.5,
-              bgcolor: 'grey.200',
-              borderRadius: 2,
-              px: 2,
-              py: 1,
+              gap: 0.75,
+              bgcolor: 'rgba(0, 255, 255, 0.15)',
+              borderRadius: '18px',
+              px: 2.5,
+              py: 1.5,
+              boxShadow: '0 2px 15px rgba(0, 255, 255, 0.4)',
+              border: '1px solid rgba(0, 255, 255, 0.4)',
             }}
           >
             <Box
-              className="typing-dot"
               sx={{
-                width: 6,
-                height: 6,
+                width: 8,
+                height: 8,
                 borderRadius: '50%',
-                bgcolor: 'grey.600',
-                animation: 'typingDot 1.4s infinite',
+                background: 'linear-gradient(135deg, #00FFFF 0%, #FF00FF 100%)',
+                animation: 'typingDotBounce 1.4s ease-in-out infinite',
                 animationDelay: '0s',
-                '@keyframes typingDot': {
-                  '0%, 60%, 100%': { transform: 'translateY(0)' },
-                  '30%': { transform: 'translateY(-8px)' },
+                '@keyframes typingDotBounce': {
+                  '0%, 60%, 100%': {
+                    transform: 'translateY(0) scale(1)',
+                    opacity: 0.7,
+                  },
+                  '30%': {
+                    transform: 'translateY(-10px) scale(1.2)',
+                    opacity: 1,
+                  },
                 },
               }}
             />
             <Box
               sx={{
-                width: 6,
-                height: 6,
+                width: 8,
+                height: 8,
                 borderRadius: '50%',
-                bgcolor: 'grey.600',
-                animation: 'typingDot 1.4s infinite',
+                background: 'linear-gradient(135deg, #00FFFF 0%, #FF00FF 100%)',
+                animation: 'typingDotBounce 1.4s ease-in-out infinite',
                 animationDelay: '0.2s',
-                '@keyframes typingDot': {
-                  '0%, 60%, 100%': { transform: 'translateY(0)' },
-                  '30%': { transform: 'translateY(-8px)' },
+                '@keyframes typingDotBounce': {
+                  '0%, 60%, 100%': {
+                    transform: 'translateY(0) scale(1)',
+                    opacity: 0.7,
+                  },
+                  '30%': {
+                    transform: 'translateY(-10px) scale(1.2)',
+                    opacity: 1,
+                  },
                 },
               }}
             />
             <Box
               sx={{
-                width: 6,
-                height: 6,
+                width: 8,
+                height: 8,
                 borderRadius: '50%',
-                bgcolor: 'grey.600',
-                animation: 'typingDot 1.4s infinite',
+                background: 'linear-gradient(135deg, #00FFFF 0%, #FF00FF 100%)',
+                animation: 'typingDotBounce 1.4s ease-in-out infinite',
                 animationDelay: '0.4s',
-                '@keyframes typingDot': {
-                  '0%, 60%, 100%': { transform: 'translateY(0)' },
-                  '30%': { transform: 'translateY(-8px)' },
+                '@keyframes typingDotBounce': {
+                  '0%, 60%, 100%': {
+                    transform: 'translateY(0) scale(1)',
+                    opacity: 0.7,
+                  },
+                  '30%': {
+                    transform: 'translateY(-10px) scale(1.2)',
+                    opacity: 1,
+                  },
                 },
               }}
             />
           </Box>
-          <Typography variant="caption" color="text.secondary">
+          <Typography
+            variant="caption"
+            sx={{
+              color: 'text.secondary',
+              fontWeight: 500,
+              fontSize: '0.75rem',
+              fontStyle: 'italic',
+            }}
+          >
             {typingUsers[0].username} is typing...
           </Typography>
         </Box>

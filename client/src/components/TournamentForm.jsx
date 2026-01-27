@@ -53,8 +53,10 @@ const TournamentForm = ({ initialData = {}, onSubmit }) => {
   useEffect(() => {
     const fetchGames = async () => {
       try {
-        const data = await api.get("/api/games");
-        setGames(Array.isArray(data) ? data : []);
+        const response = await api.get("/api/games");
+        // Handle response format: { success: true, data: [...] }
+        const gamesData = response.data || response || [];
+        setGames(Array.isArray(gamesData) ? gamesData : []);
       } catch (err) {
         setGamesError(err.message || "Failed to load games");
         setGames([]);
@@ -62,7 +64,7 @@ const TournamentForm = ({ initialData = {}, onSubmit }) => {
         setLoadingGames(false);
       }
     };
-    
+
     fetchGames();
   }, []);
 

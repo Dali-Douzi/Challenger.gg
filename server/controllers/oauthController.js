@@ -66,17 +66,24 @@ exports.googleCallback = (req, res) => {
 
 exports.discordCallback = (req, res) => {
   try {
+    console.log("🔵 [discordCallback] Processing Discord callback");
+    console.log("🔵 [discordCallback] User object:", req.user ? { id: req.user._id, email: req.user.email } : null);
+
     if (!req.user) {
+      console.error("❌ [discordCallback] No user object in request");
       return res.redirect(
         `${getFrontendUrl()}/auth/error?error=Authentication failed`
       );
     }
 
     const { accessToken, refreshToken } = generateTokens(req.user._id);
+    console.log("✅ [discordCallback] Tokens generated, setting cookies");
     setAuthCookies(res, accessToken, refreshToken);
+    console.log("✅ [discordCallback] Redirecting to:", `${getFrontendUrl()}/auth/success`);
     res.redirect(`${getFrontendUrl()}/auth/success`);
   } catch (error) {
-    console.error("Discord OAuth callback error:", error);
+    console.error("❌ [discordCallback] Error:", error);
+    console.error("❌ [discordCallback] Stack:", error.stack);
     res.redirect(
       `${getFrontendUrl()}/auth/error?error=Token generation failed`
     );

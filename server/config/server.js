@@ -327,16 +327,41 @@ class OrphanedCleanup {
         }
       }
 
+      // Delete scrims more than 1 hour past their scheduled time
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+
+      const pastScrims = await Scrim.find({
+        scheduledTime: { $lt: oneHourAgo },
+      });
+
+      if (!dryRun) {
+        for (const scrim of pastScrims) {
+          await Chat.deleteMany({
+            type: "scrim",
+            "metadata.scrimId": scrim._id,
+          });
+          await Notification.deleteMany({ scrim: scrim._id });
+        }
+
+        const deletedPastScrims = await Scrim.deleteMany({
+          scheduledTime: { $lt: oneHourAgo },
+        });
+        results.cleanedOldScrims = deletedPastScrims.deletedCount;
+      } else {
+        results.cleanedOldScrims = pastScrims.length;
+      }
+
+      // Also clean up very old scrims based on creation date (fallback)
       const scrimCutoff = new Date(
         Date.now() - SCRIM_RETENTION_DAYS * 24 * 60 * 60 * 1000
       );
 
-      const oldScrims = await Scrim.find({
+      const oldScrimsByCreation = await Scrim.find({
         createdAt: { $lt: scrimCutoff },
       });
 
       if (!dryRun) {
-        for (const scrim of oldScrims) {
+        for (const scrim of oldScrimsByCreation) {
           await Chat.deleteMany({
             type: "scrim",
             "metadata.scrimId": scrim._id,
@@ -347,9 +372,9 @@ class OrphanedCleanup {
         const deletedOldScrims = await Scrim.deleteMany({
           createdAt: { $lt: scrimCutoff },
         });
-        results.cleanedOldScrims = deletedOldScrims.deletedCount;
+        results.cleanedOldScrims += deletedOldScrims.deletedCount;
       } else {
-        results.cleanedOldScrims = oldScrims.length;
+        results.cleanedOldScrims += oldScrimsByCreation.length;
       }
 
       // Clean up old read notifications
@@ -460,7 +485,7 @@ const startCleanupScheduler = () => {
   );
 
   console.log("Cleanup scheduler started - daily at 2:00 AM UTC");
-  console.log(`Scrim retention: ${SCRIM_RETENTION_DAYS} days`);
+  console.log(`Scrim cleanup: 1 hour after scheduled time + ${SCRIM_RETENTION_DAYS} day fallback`);
   console.log(`Tournament retention: ${TOURNAMENT_RETENTION_DAYS} days`);
   console.log(`Notification retention: ${NOTIFICATION_RETENTION_DAYS} days`);
 };
@@ -483,10 +508,14 @@ const gracefulShutdown = (signal) => {
       });
     }
 
-    mongoose.connection.close(() => {
+    // Mongoose 8+ no longer accepts callbacks, use async/await or promises
+    mongoose.connection.close().then(() => {
       console.log("MongoDB connection closed");
       console.log("Process terminated gracefully");
       process.exit(0);
+    }).catch((err) => {
+      console.error("Error closing MongoDB connection:", err);
+      process.exit(1);
     });
   });
 
@@ -582,7 +611,7 @@ app.use(passport.session());
 
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: process.env.NODE_ENV === 'production' ? 100 : 1000, // Higher limit for dev/test
   message: {
     success: false,
     message: "Too many requests from this IP, please try again later.",
@@ -1068,7 +1097,7 @@ server.listen(PORT, () => {
   console.log(`Socket.IO: Enabled`);
   console.log(`Event-Driven Architecture: Enabled`);
   console.log(
-    `Cleanup: Enabled (${SCRIM_RETENTION_DAYS} day scrim retention, ${TOURNAMENT_RETENTION_DAYS} day tournament retention, ${NOTIFICATION_RETENTION_DAYS} day notification retention)`
+    `Cleanup: Enabled (1hr past scrims + ${SCRIM_RETENTION_DAYS}d fallback, ${TOURNAMENT_RETENTION_DAYS}d tournaments, ${NOTIFICATION_RETENTION_DAYS}d notifications)`
   );
   console.log("Registered routes:");
   console.log("   • Auth routes: /api/auth");

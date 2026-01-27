@@ -41,8 +41,8 @@ const useChat = (scrimId) => {
 
     try {
       console.log(`💬 [useChat] Loading chat for scrim: ${scrimId}`);
-      
-      const response = await getChatByScrimIdWithRetry(scrimId, 5, 1000);
+
+      const response = await getChatByScrimIdWithRetry(scrimId, 10, 1500);
       
       if (response && response.success && response.data) {
         const chatData = response.data;

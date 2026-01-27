@@ -10,6 +10,11 @@ export default defineConfig({
         target: 'http://localhost:4444',
         changeOrigin: true,
       },
+      '/socket.io': {
+        target: 'http://localhost:4444',
+        changeOrigin: true,
+        ws: true, // Enable WebSocket proxying
+      },
     },
   },
   test: {

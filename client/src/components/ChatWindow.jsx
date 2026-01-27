@@ -80,15 +80,17 @@ const ChatWindow = ({ scrimId, chatId, minimized, unreadCount }) => {
   return (
     <Paper
       ref={windowRef}
-      elevation={8}
+      elevation={24}
       sx={{
-        width: 320,
-        height: isExpanded ? 450 : 'auto',
+        width: 360,
+        height: isExpanded ? 500 : 'auto',
         display: 'flex',
         flexDirection: 'column',
-        borderRadius: '8px 8px 0 0',
+        borderRadius: '16px 16px 0 0',
         overflow: 'hidden',
-        transition: 'height 0.3s ease',
+        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
+        border: '1px solid rgba(255, 255, 255, 0.1)',
       }}
     >
       {/* Header */}
@@ -97,45 +99,82 @@ const ChatWindow = ({ scrimId, chatId, minimized, unreadCount }) => {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          p: 1.5,
-          bgcolor: 'primary.main',
-          color: 'white',
+          p: 2,
+          background: 'linear-gradient(135deg, #00FFFF 0%, #FF00FF 100%)',
+          color: '#000000',
           cursor: 'pointer',
+          transition: 'all 0.2s ease',
+          '&:hover': {
+            background: 'linear-gradient(135deg, #5DFDFD 0%, #FF5DFF 100%)',
+          },
         }}
         onClick={handleToggleMinimize}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, minWidth: 0 }}>
-          <Typography
-            variant="subtitle2"
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flex: 1, minWidth: 0 }}>
+          <Box
             sx={{
-              fontWeight: 600,
+              width: 10,
+              height: 10,
+              borderRadius: '50%',
+              bgcolor: '#00E676',
+              boxShadow: '0 0 12px rgba(0, 230, 118, 0.8)',
+              animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+              '@keyframes pulse': {
+                '0%, 100%': { opacity: 1 },
+                '50%': { opacity: 0.5 },
+              },
+            }}
+          />
+          <Typography
+            variant="subtitle1"
+            sx={{
+              fontWeight: 700,
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
+              fontSize: '0.95rem',
+              letterSpacing: '0.02em',
             }}
           >
             {getChatTitle()}
           </Typography>
-          
+
           {!isExpanded && unreadCount > 0 && (
             <Badge
               badgeContent={unreadCount}
-              color="error"
               sx={{
                 '& .MuiBadge-badge': {
                   position: 'relative',
                   transform: 'none',
+                  bgcolor: '#ef4444',
+                  color: 'white',
+                  fontWeight: 700,
+                  fontSize: '0.7rem',
+                  minWidth: 20,
+                  height: 20,
+                  borderRadius: '10px',
+                  boxShadow: '0 2px 8px rgba(239, 68, 68, 0.4)',
                 },
               }}
             />
           )}
         </Box>
 
-        <Box sx={{ display: 'flex', gap: 0.5 }} onClick={(e) => e.stopPropagation()}>
+        <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
           <IconButton
             size="small"
             onClick={handleToggleMinimize}
-            sx={{ color: 'white', p: 0.5 }}
+            sx={{
+              color: '#000000',
+              p: 0.75,
+              transition: 'all 0.2s',
+              width: 32,
+              height: 32,
+              '&:hover': {
+                bgcolor: 'rgba(0, 0, 0, 0.15)',
+                transform: 'scale(1.1)',
+              },
+            }}
           >
             {isExpanded ? (
               <MinimizeIcon fontSize="small" />
@@ -146,7 +185,17 @@ const ChatWindow = ({ scrimId, chatId, minimized, unreadCount }) => {
           <IconButton
             size="small"
             onClick={handleClose}
-            sx={{ color: 'white', p: 0.5 }}
+            sx={{
+              color: '#000000',
+              p: 0.75,
+              transition: 'all 0.2s',
+              width: 32,
+              height: 32,
+              '&:hover': {
+                bgcolor: 'rgba(255, 23, 68, 0.3)',
+                transform: 'scale(1.1)',
+              },
+            }}
           >
             <CloseIcon fontSize="small" />
           </IconButton>
@@ -159,7 +208,8 @@ const ChatWindow = ({ scrimId, chatId, minimized, unreadCount }) => {
           sx={{
             display: 'flex',
             flexDirection: 'column',
-            height: 394, // Total height (450) - header height (56)
+            height: 436, // Total height (500) - header height (64)
+            bgcolor: 'background.default',
           }}
         >
           {/* Loading State */}
@@ -205,10 +255,15 @@ const ChatWindow = ({ scrimId, chatId, minimized, unreadCount }) => {
                 />
               </Box>
 
-              <Divider />
-
               {/* Input */}
-              <Box sx={{ p: 1 }}>
+              <Box
+                sx={{
+                  p: 2,
+                  bgcolor: 'background.paper',
+                  borderTop: '1px solid rgba(0, 255, 255, 0.3)',
+                  boxShadow: '0 -2px 15px rgba(0, 255, 255, 0.2)',
+                }}
+              >
                 <MessageInput
                   onSend={handleSendMessage}
                   onTyping={handleTyping}

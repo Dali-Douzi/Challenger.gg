@@ -4,6 +4,7 @@ import { Container, Typography, Box, Button, Alert, CircularProgress } from "@mu
 import TournamentForm from "../components/TournamentForm";
 import ActionModal from "../components/ActionModal";
 import { useAuth } from "../context/AuthContext";
+import api from "../services/apiClient";
 
 const CreateTournamentPage = () => {
   const navigate = useNavigate();
@@ -16,9 +17,11 @@ const CreateTournamentPage = () => {
 
   const handleCreate = async (formData) => {
   try {
-    const data = await api.post("/api/tournaments", formData);
-    setRefCode(data.refereeCode);
-    setTourneyId(data._id);
+    const response = await api.post("/api/tournaments", formData);
+    // Handle response format: { success: true, data: {...} }
+    const tournamentData = response.data || response;
+    setRefCode(tournamentData.refereeCode);
+    setTourneyId(tournamentData._id);
     setShowCode(true);
   } catch (err) {
     setErrorMsg(err.message || "Error creating tournament");
@@ -27,7 +30,9 @@ const CreateTournamentPage = () => {
 
   const handleRefereeJoin = async (code) => {
   try {
-    const tournamentData = await api.get(`/api/tournaments/code/${code}`);
+    const response = await api.get(`/api/tournaments/code/${code}`);
+    // Handle response format: { success: true, data: {...} }
+    const tournamentData = response.data || response;
     await api.post(`/api/tournaments/${tournamentData._id}/referees`, { code });
     navigate(`/tournaments/${tournamentData._id}`);
   } catch (err) {

@@ -316,7 +316,7 @@ const App = () => {
                 />
 
                 <Route
-                  path="/tournaments/:tournamentId/bracket"
+                  path="/tournaments/:id/bracket"
                   element={
                     <ProtectedRoute>
                       <Navbar />

@@ -86,6 +86,9 @@ const ParticipantsSection = ({ tournament, onUpdate }) => {
   const isOrganizer = tournament.isOrganizer;
   const isReferee = tournament.isReferee;
   const isRegistrationOpen = tournament.status === "REGISTRATION_OPEN";
+  const isBracketLocked = tournament.status === "BRACKET_LOCKED" ||
+                          tournament.status === "IN_PROGRESS" ||
+                          tournament.status === "COMPLETE";
 
   const { teamsInTournamentIds, eligibleTeamsToJoin } = useMemo(() => {
     if (!myTeams || !tournament.pendingTeams || !tournament.teams) {
@@ -191,7 +194,7 @@ const ParticipantsSection = ({ tournament, onUpdate }) => {
         </Box>
       )}
 
-      {isOrganizer && tournament.pendingTeams?.length > 0 && (
+      {isOrganizer && !isBracketLocked && tournament.pendingTeams?.length > 0 && (
         <Paper elevation={2} sx={{ p: 2, mb: 3 }}>
           <Typography
             variant="h6"
@@ -266,7 +269,7 @@ const ParticipantsSection = ({ tournament, onUpdate }) => {
               <ListItem
                 key={team._id}
                 secondaryAction={
-                  isOrganizer && (
+                  isOrganizer && !isBracketLocked && (
                     <Tooltip title="Remove Team">
                       <IconButton
                         edge="end"

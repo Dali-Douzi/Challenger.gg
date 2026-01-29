@@ -1175,6 +1175,14 @@ exports.updateMatch = async (req, res) => {
       });
     }
 
+    // Only allow score updates when bracket is locked or tournament is in progress
+    if (tourney.status !== "BRACKET_LOCKED" && tourney.status !== "IN_PROGRESS") {
+      return res.status(400).json({
+        success: false,
+        message: "Scores can only be updated after the bracket is locked",
+      });
+    }
+
     if (scoreA !== undefined) match.scoreA = scoreA;
     if (scoreB !== undefined) match.scoreB = scoreB;
     if (winner) {

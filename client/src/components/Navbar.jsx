@@ -499,7 +499,7 @@ const Navbar = () => {
                   },
                 }}
               >
-                <Badge badgeContent={bellUnreadCount} color="error">
+                <Badge badgeContent={bellUnreadCount} color="secondary">
                   <Notifications />
                 </Badge>
               </IconButton>

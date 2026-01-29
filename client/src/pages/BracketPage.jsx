@@ -1897,6 +1897,84 @@ const BracketPage = () => {
       winnersFinalsMatch.data.name = "Winners Finals";
     }
 
+    // Add loser connections from winners bracket to losers bracket
+    // Round 1 losers drop to losers bracket round 1
+    if (loserMatchesByRound[0] && winnerMatchesByRound[0]) {
+      const firstRoundLosers = winnerMatchesByRound[0];
+      const firstLoserRound = loserMatchesByRound[0];
+
+      for (let i = 0; i < firstRoundLosers.length && i < firstLoserRound.length * 2; i++) {
+        const fromMatchId = firstRoundLosers[i];
+        const toMatchIndex = Math.floor(i / 2);
+        const toMatchId = firstLoserRound[toMatchIndex];
+        const inputPoint = i % 2 === 0 ? "inA" : "inB";
+
+        if (toMatchId) {
+          newConnections.push({
+            id: generateId(),
+            from: { componentId: fromMatchId, pointId: "loser" },
+            to: { componentId: toMatchId, pointId: inputPoint },
+            type: "loser",
+          });
+        }
+      }
+    }
+
+    // Add loser connection from winners finals to losers finals (if exists)
+    if (loserMatchesByRound.length > 0) {
+      const lastLoserRound = loserMatchesByRound[loserMatchesByRound.length - 1];
+      if (lastLoserRound && lastLoserRound.length > 0) {
+        const losersFinalsId = lastLoserRound[lastLoserRound.length - 1];
+
+        // Winners finals loser goes to losers finals
+        newConnections.push({
+          id: generateId(),
+          from: { componentId: winnersFinalsId, pointId: "loser" },
+          to: { componentId: losersFinalsId, pointId: "inA" },
+          type: "loser",
+        });
+
+        // Losers finals winner goes to grand finals
+        newConnections.push({
+          id: generateId(),
+          from: { componentId: losersFinalsId, pointId: "winner" },
+          to: { componentId: grandFinalsId, pointId: "inB" },
+          type: "winner",
+        });
+
+        // Mark losers finals
+        const losersFinalsMatch = newComponents.find(c => c.id === losersFinalsId);
+        if (losersFinalsMatch) {
+          losersFinalsMatch.data.name = "Losers Finals";
+        }
+      }
+    }
+
+    // Add connections within losers bracket (losers progress through losers bracket)
+    for (let round = 0; round < loserMatchesByRound.length - 1; round++) {
+      const currentRoundMatches = loserMatchesByRound[round];
+      const nextRoundMatches = loserMatchesByRound[round + 1];
+
+      if (!currentRoundMatches || !nextRoundMatches) continue;
+
+      for (let i = 0; i < currentRoundMatches.length; i++) {
+        const fromMatchId = currentRoundMatches[i];
+        // In losers bracket, matches may consolidate differently
+        const toMatchIndex = Math.floor(i / 2);
+        const toMatchId = nextRoundMatches[Math.min(toMatchIndex, nextRoundMatches.length - 1)];
+        const inputPoint = (nextRoundMatches.length === 1 || i % 2 === 0) ? "inB" : "inB";
+
+        if (toMatchId && fromMatchId !== toMatchId) {
+          newConnections.push({
+            id: generateId(),
+            from: { componentId: fromMatchId, pointId: "winner" },
+            to: { componentId: toMatchId, pointId: inputPoint },
+            type: "winner",
+          });
+        }
+      }
+    }
+
     return { components: newComponents, connections: newConnections };
   };
 

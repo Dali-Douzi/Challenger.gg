@@ -29,6 +29,11 @@ const ManageTeams = ({
   const [processingTeamId, setProcessingTeamId] = useState(null);
   const [error, setError] = useState("");
 
+  // Check if bracket is locked (teams can't be removed after bracket is locked)
+  const isBracketLocked = tournament?.status === "BRACKET_LOCKED" ||
+                          tournament?.status === "IN_PROGRESS" ||
+                          tournament?.status === "COMPLETE";
+
   const teamsToShow = useMemo(() => {
     if (!myTeams || !tournament) return [];
     
@@ -87,6 +92,12 @@ const ManageTeams = ({
           <Typography>None of your teams are currently in this tournament.</Typography>
         )}
 
+        {!loadingMyTeams && isBracketLocked && teamsToShow.length > 0 && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            The bracket has been locked. Teams cannot be removed at this stage.
+          </Alert>
+        )}
+
         {!loadingMyTeams && teamsToShow.length > 0 && (
           <List>
             {teamsToShow.map((team) => (
@@ -94,13 +105,13 @@ const ManageTeams = ({
                 key={team._id}
                 divider
                 secondaryAction={
-                  <Tooltip title={team.statusInTournament === "APPROVED" ? "Leave Tournament" : "Cancel Request"}>
+                  <Tooltip title={isBracketLocked ? "Cannot leave after bracket is locked" : (team.statusInTournament === "APPROVED" ? "Leave Tournament" : "Cancel Request")}>
                     <span>
                       <IconButton
                         edge="end"
                         color="error"
                         onClick={() => handleTeamAction(team._id, team.name, team.statusInTournament)}
-                        disabled={processingTeamId === team._id}
+                        disabled={processingTeamId === team._id || isBracketLocked}
                         aria-label={team.statusInTournament === "APPROVED" ? "leave tournament" : "cancel request"}
                       >
                         {processingTeamId === team._id ? (

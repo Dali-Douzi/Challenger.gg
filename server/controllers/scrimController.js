@@ -57,10 +57,10 @@ exports.listScrims = async (req, res) => {
     }
 
     let scrims = await Scrim.find(filter)
-      .populate("teamA", "name logo game rank server")
-      .populate("teamB", "name logo game rank server")
+      .populate("teamA", "name logo game rank server owner members")
+      .populate("teamB", "name logo game rank server owner members")
       .populate("game", "name")
-      .populate("requests", "name logo")
+      .populate("requests", "name logo owner")
       .sort({ createdAt: -1 })
       .lean();
 
@@ -193,7 +193,7 @@ exports.createScrim = async (req, res) => {
     let populatedScrim;
     try {
       populatedScrim = await Scrim.findById(scrim._id)
-        .populate("teamA", "name logo game rank server")
+        .populate("teamA", "name logo game rank server owner members")
         .populate("game", "name")
         .lean();
     } catch (populateError) {
@@ -254,7 +254,7 @@ exports.requestScrim = async (req, res) => {
     validateObjectId(teamId, "team ID");
 
     const scrim = await Scrim.findById(scrimId)
-      .populate("teamA", "name")
+      .populate("teamA", "name owner")
       .populate("game", "name");
     if (!scrim) {
       return res.status(404).json({
@@ -345,10 +345,10 @@ exports.requestScrim = async (req, res) => {
     }
 
     const updatedScrim = await Scrim.findById(scrim._id)
-      .populate("teamA", "name logo game rank server")
-      .populate("teamB", "name logo game rank server")
+      .populate("teamA", "name logo game rank server owner members")
+      .populate("teamB", "name logo game rank server owner members")
       .populate("game", "name")
-      .populate("requests", "name logo");
+      .populate("requests", "name logo owner");
 
     res.json({
       success: true,
@@ -472,10 +472,10 @@ exports.updateScrim = async (req, res) => {
 
     const updated = await scrim.save();
     const populatedScrim = await Scrim.findById(updated._id)
-      .populate("teamA", "name logo game rank server")
-      .populate("teamB", "name logo game rank server")
+      .populate("teamA", "name logo game rank server owner members")
+      .populate("teamB", "name logo game rank server owner members")
       .populate("game", "name")
-      .populate("requests", "name logo");
+      .populate("requests", "name logo owner");
 
     eventService.emit("scrim:updated", {
       scrimId: scrim._id,
@@ -688,7 +688,7 @@ exports.acceptScrim = async (req, res) => {
         chat: chat ? chat._id : null,
         message: `${postingTeam.name} accepted your scrim request`,
         type: "accept",
-        url: chatId ? `/chats/${chatId}` : `/scrims/${scrim._id}`,
+        url: `/teams/${postingTeam._id}`,
       }),
       Notification.create({
         team: scrim.teamA,
@@ -696,7 +696,7 @@ exports.acceptScrim = async (req, res) => {
         chat: chat ? chat._id : null,
         message: `You accepted ${requestingTeam.name}'s request`,
         type: "accept-feedback",
-        url: chatId ? `/chats/${chatId}` : `/scrims/${scrim._id}`,
+        url: `/teams/${requestingTeam._id}`,
       }),
     ]);
 
@@ -714,8 +714,8 @@ exports.acceptScrim = async (req, res) => {
     }
 
     const updatedScrim = await Scrim.findById(scrim._id)
-      .populate("teamA", "name logo game rank server")
-      .populate("teamB", "name logo game rank server")
+      .populate("teamA", "name logo game rank server owner members")
+      .populate("teamB", "name logo game rank server owner members")
       .populate("game", "name");
 
     res.json({
@@ -821,10 +821,10 @@ exports.declineScrim = async (req, res) => {
     }
 
     const updatedScrim = await Scrim.findById(scrim._id)
-      .populate("teamA", "name logo game rank server")
-      .populate("teamB", "name logo game rank server")
+      .populate("teamA", "name logo game rank server owner members")
+      .populate("teamB", "name logo game rank server owner members")
       .populate("game", "name")
-      .populate("requests", "name logo");
+      .populate("requests", "name logo owner");
 
     res.json({
       success: true,
@@ -899,8 +899,8 @@ exports.completeScrim = async (req, res) => {
     });
 
     const populatedScrim = await Scrim.findById(scrim._id)
-      .populate("teamA", "name logo game rank server")
-      .populate("teamB", "name logo game rank server")
+      .populate("teamA", "name logo game rank server owner members")
+      .populate("teamB", "name logo game rank server owner members")
       .populate("game", "name");
 
     res.json({

@@ -3,14 +3,12 @@ const jwt = require("jsonwebtoken");
 const cloudinary = require("cloudinary").v2;
 const User = require("../models/User");
 
-// Configure Cloudinary
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// Helper function to format user response
 const formatUserResponse = (user) => ({
   id: user._id,
   username: user.username,
@@ -21,7 +19,6 @@ const formatUserResponse = (user) => ({
   createdAt: user.createdAt,
 });
 
-// Helper Functions
 const sanitizeInput = (input) => {
   if (typeof input !== "string") return input;
   return input.trim().replace(/[<>]/g, "");
@@ -83,6 +80,7 @@ const validateUserChanges = async (userId, changes) => {
   return { isValid: errors.length === 0, errors };
 };
 
+// Feature: JWT token generation with short-lived access token and long-lived refresh token
 const generateTokens = (userId) => {
   const accessToken = jwt.sign({ userId }, process.env.JWT_SECRET, {
     expiresIn: "15m",
@@ -134,10 +132,7 @@ const deleteOldAvatar = async (avatarUrl) => {
       const fullPublicId = `challenger/avatars/${publicId}`;
 
       const result = await cloudinary.uploader.destroy(fullPublicId);
-      console.log(
-        `Deleted old avatar from Cloudinary: ${fullPublicId}`,
-        result
-      );
+      console.log(`Deleted old avatar from Cloudinary: ${fullPublicId}`, result);
     }
   } catch (error) {
     console.error("Error deleting old avatar from Cloudinary:", error);
@@ -146,7 +141,7 @@ const deleteOldAvatar = async (avatarUrl) => {
 
 const runPostDeletionCleanup = async (verbose = false) => {
   try {
-    if (verbose) console.log("ðŸ§¹ Running post-deletion cleanup...");
+    if (verbose) console.log("Running post-deletion cleanup...");
 
     const Team = require("../models/Team");
     const Scrim = require("../models/Scrim");
@@ -177,7 +172,7 @@ const runPostDeletionCleanup = async (verbose = false) => {
 
         await Team.findByIdAndDelete(team._id);
         cleanedTeams++;
-        if (verbose) console.log(`ðŸ§¹ Cleaned orphaned team: ${team.name}`);
+        if (verbose) console.log(`Cleaned orphaned team: ${team.name}`);
       }
     }
 
@@ -190,7 +185,7 @@ const runPostDeletionCleanup = async (verbose = false) => {
         await Notification.deleteMany({ scrim: scrim._id });
         await Scrim.findByIdAndDelete(scrim._id);
         cleanedScrims++;
-        if (verbose) console.log(`ðŸ§¹ Cleaned orphaned scrim: ${scrim._id}`);
+        if (verbose) console.log(`Cleaned orphaned scrim: ${scrim._id}`);
       }
     }
 
@@ -200,7 +195,7 @@ const runPostDeletionCleanup = async (verbose = false) => {
 
     if (verbose) {
       console.log(
-        `âœ… Post-deletion cleanup completed: ${cleanedTeams} teams, ${cleanedScrims} scrims, ${orphanedNotifications.deletedCount} orphaned notifications`
+        `Post-deletion cleanup completed: ${cleanedTeams} teams, ${cleanedScrims} scrims, ${orphanedNotifications.deletedCount} orphaned notifications`
       );
     }
 
@@ -210,7 +205,7 @@ const runPostDeletionCleanup = async (verbose = false) => {
       cleanedOrphanedNotifications: orphanedNotifications.deletedCount,
     };
   } catch (error) {
-    console.error("âš ï¸ Post-deletion cleanup failed:", error);
+    console.error("Post-deletion cleanup failed:", error);
     return {
       cleanedTeams: 0,
       cleanedScrims: 0,
@@ -220,7 +215,6 @@ const runPostDeletionCleanup = async (verbose = false) => {
   }
 };
 
-// Controller Methods
 exports.signup = async (req, res) => {
   try {
     let { username, email, password } = req.body;
@@ -344,6 +338,7 @@ exports.login = async (req, res) => {
   }
 };
 
+// Feature: JWT refresh token rotation for secure session management
 exports.refresh = async (req, res) => {
   try {
     const { refreshToken } = req.cookies;
@@ -758,7 +753,7 @@ exports.deleteAccount = async (req, res) => {
       });
     }
 
-    console.log(`ðŸ—‘ï¸ User deletion initiated: ${user.username} (${user.email})`);
+    console.log(`User deletion initiated: ${user.username} (${user.email})`);
 
     if (user.avatar) {
       await deleteOldAvatar(user.avatar);
@@ -775,13 +770,13 @@ exports.deleteAccount = async (req, res) => {
 
     clearAuthCookies(res);
 
-    console.log(`âœ… User account deleted: ${user.username}`);
+    console.log(`User account deleted: ${user.username}`);
 
     try {
       const cleanupResults = await runPostDeletionCleanup(true);
-      console.log("âœ… Post-deletion cleanup completed:", cleanupResults);
+      console.log("Post-deletion cleanup completed:", cleanupResults);
     } catch (cleanupError) {
-      console.error("âš ï¸ Post-deletion cleanup failed:", cleanupError);
+      console.error("Post-deletion cleanup failed:", cleanupError);
     }
 
     res.json({
@@ -806,4 +801,162 @@ exports.healthCheck = (req, res) => {
     message: "Auth service is healthy",
     timestamp: new Date().toISOString(),
   });
+};
+
+// New update endpoints (without password verification for simpler flow)
+exports.updateUsername = async (req, res) => {
+  try {
+    let { username } = req.body;
+
+    username = sanitizeInput(username);
+
+    if (!username) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide a new username",
+      });
+    }
+
+    const user = await User.findById(req.user.userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const validation = await validateUserChanges(user._id, { username });
+    if (!validation.isValid) {
+      return res.status(400).json({
+        success: false,
+        message: validation.errors.join(". "),
+      });
+    }
+
+    user.username = username;
+    await user.save();
+
+    res.json({
+      success: true,
+      message: "Username updated successfully",
+      user: formatUserResponse(user),
+    });
+  } catch (error) {
+    console.error("Update username error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error while updating username",
+      ...(process.env.NODE_ENV === "development" && {
+        details: error.message,
+      }),
+    });
+  }
+};
+
+exports.updateEmail = async (req, res) => {
+  try {
+    let { email } = req.body;
+
+    email = sanitizeInput(email);
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide a new email",
+      });
+    }
+
+    const user = await User.findById(req.user.userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const validation = await validateUserChanges(user._id, { email });
+    if (!validation.isValid) {
+      return res.status(400).json({
+        success: false,
+        message: validation.errors.join(". "),
+      });
+    }
+
+    user.email = email;
+    await user.save();
+
+    res.json({
+      success: true,
+      message: "Email updated successfully",
+      user: formatUserResponse(user),
+    });
+  } catch (error) {
+    console.error("Update email error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error while updating email",
+      ...(process.env.NODE_ENV === "development" && {
+        details: error.message,
+      }),
+    });
+  }
+};
+
+exports.updatePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide current password and new password",
+      });
+    }
+
+    const user = await User.findById(req.user.userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const isPasswordValid = await bcrypt.compare(
+      currentPassword,
+      user.password
+    );
+    if (!isPasswordValid) {
+      return res.status(401).json({
+        success: false,
+        message: "Current password is incorrect",
+      });
+    }
+
+    const validation = await validateUserChanges(user._id, {
+      password: newPassword,
+    });
+    if (!validation.isValid) {
+      return res.status(400).json({
+        success: false,
+        message: validation.errors.join(". "),
+      });
+    }
+
+    const salt = await bcrypt.genSalt(12);
+    const hashedNewPassword = await bcrypt.hash(newPassword, salt);
+
+    user.password = hashedNewPassword;
+    await user.save();
+
+    res.json({ success: true, message: "Password updated successfully" });
+  } catch (error) {
+    console.error("Update password error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error while updating password",
+      ...(process.env.NODE_ENV === "development" && {
+        details: error.message,
+      }),
+    });
+  }
 };

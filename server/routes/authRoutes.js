@@ -100,7 +100,11 @@ router.get("/me", auth, authController.getMe);
 router.put("/change-email", auth, authController.changeEmail);
 router.put("/change-password", auth, authController.changePassword);
 router.put("/change-username", auth, authController.changeUsername);
+router.put("/update-email", auth, authController.updateEmail);
+router.put("/update-password", auth, authController.updatePassword);
+router.put("/update-username", auth, authController.updateUsername);
 router.put("/change-avatar", auth, handleUpload, authController.changeAvatar);
+router.put("/update-avatar", auth, handleUpload, authController.changeAvatar);
 router.delete("/delete-avatar", auth, authController.deleteAvatar);
 router.delete("/delete-account", auth, authController.deleteAccount);
 

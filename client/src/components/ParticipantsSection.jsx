@@ -35,7 +35,7 @@ import api from "../services/apiClient";
 import { useAuth } from "../context/AuthContext";
 
 const ParticipantsSection = ({ tournament, onUpdate }) => {
-  const { currentUser } = useAuth();
+  const { user: currentUser } = useAuth();
   
   // Modal states
   const [refModalOpen, setRefModalOpen] = useState(false);
@@ -54,12 +54,13 @@ const ParticipantsSection = ({ tournament, onUpdate }) => {
   // Fetch my teams data
   const fetchMyTeams = async () => {
     if (!currentUser) return;
-    
+
     setMyTeamsLoading(true);
     setMyTeamsError("");
     try {
-      const data = await api.get("/api/teams/my");
-      setMyTeams(data);
+      const response = await api.get("/api/teams/my");
+      const teamsData = response.data || response || [];
+      setMyTeams(Array.isArray(teamsData) ? teamsData : []);
     } catch (err) {
       setMyTeamsError(err.message || "Failed to load teams");
     } finally {

@@ -45,7 +45,7 @@ const TournamentPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const { currentUser } = useAuth();
+  const { user: currentUser } = useAuth();
 
   // Tournament state (replacing useTournament hook)
   const [tournament, setTournament] = useState(null);
@@ -90,7 +90,7 @@ const TournamentPage = () => {
     try {
       const response = await api.get("/api/teams/my");
       // Handle response format: { success: true, data: [...] }
-      const teamsData = response.data || response || [];
+      const teamsData = response.data?.data || response.data || [];
       const teamsArray = Array.isArray(teamsData) ? teamsData : [];
       setMyTeams(teamsArray);
     } catch (err) {
@@ -378,6 +378,21 @@ const TournamentPage = () => {
                 onClick={() => setJoinTeamModalOpen(true)}
               >
                 Join with Team
+              </Button>
+            )}
+          {!isOrganizer &&
+            currentUser &&
+            !loadingMyTeams &&
+            myTeams.length === 0 &&
+            tournament.status === "REGISTRATION_OPEN" && (
+              <Button
+                variant="contained"
+                color="primary"
+                startIcon={<GroupAddIcon />}
+                component={RouterLink}
+                to="/teams/create"
+              >
+                Create a Team to Join
               </Button>
             )}
         </Box>

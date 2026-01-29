@@ -173,24 +173,30 @@ export const api = {
   },
 
   post: async (url, data, options = {}) => {
-    const body = data instanceof FormData ? data : JSON.stringify(data);
-    
-    const response = await apiRequest(url, {
+    const requestOptions = {
       ...options,
       method: 'POST',
-      body,
-    });
+    };
+
+    if (data != null) {
+      requestOptions.body = data instanceof FormData ? data : JSON.stringify(data);
+    }
+
+    const response = await apiRequest(url, requestOptions);
     return parseResponse(response);
   },
 
   put: async (url, data, options = {}) => {
-    const body = data instanceof FormData ? data : JSON.stringify(data);
-    
-    const response = await apiRequest(url, {
+    const requestOptions = {
       ...options,
       method: 'PUT',
-      body,
-    });
+    };
+
+    if (data != null) {
+      requestOptions.body = data instanceof FormData ? data : JSON.stringify(data);
+    }
+
+    const response = await apiRequest(url, requestOptions);
     return parseResponse(response);
   },
 
@@ -203,13 +209,16 @@ export const api = {
   },
 
   patch: async (url, data, options = {}) => {
-    const body = data instanceof FormData ? data : JSON.stringify(data);
-    
-    const response = await apiRequest(url, {
+    const requestOptions = {
       ...options,
       method: 'PATCH',
-      body,
-    });
+    };
+
+    if (data != null) {
+      requestOptions.body = data instanceof FormData ? data : JSON.stringify(data);
+    }
+
+    const response = await apiRequest(url, requestOptions);
     return parseResponse(response);
   },
 };

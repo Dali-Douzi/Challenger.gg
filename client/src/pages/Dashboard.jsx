@@ -584,9 +584,6 @@ const Dashboard = () => {
           ))}
         </Box>
       </Container>
-
-      {/* Footer */}
-      <Footer />
     </Box>
   );
 };

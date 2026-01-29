@@ -154,6 +154,7 @@ const MemberRow = ({
           />
           <RoleDropdown
             memberId={member._id}
+            memberUserId={member.user._id || member.user}
             memberRole={member.role}
             currentUserRole={currentUserRole}
             currentUserId={user?.id || user?._id}

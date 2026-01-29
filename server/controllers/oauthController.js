@@ -1,7 +1,7 @@
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 
-// Helper Functions
+// Feature: JWT token generation for OAuth callbacks
 const generateTokens = (userId) => {
   const accessToken = jwt.sign({ userId }, process.env.JWT_SECRET, {
     expiresIn: "15m",
@@ -31,12 +31,12 @@ const setAuthCookies = (res, accessToken, refreshToken) => {
 
   res.cookie("accessToken", accessToken, {
     ...cookieConfig,
-    maxAge: 15 * 60 * 1000, // 15 minutes
+    maxAge: 15 * 60 * 1000,
   });
 
   res.cookie("refreshToken", refreshToken, {
     ...cookieConfig,
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    maxAge: 7 * 24 * 60 * 60 * 1000,
   });
 };
 
@@ -44,7 +44,7 @@ const getFrontendUrl = () => {
   return process.env.CLIENT_URL || "http://localhost:5173";
 };
 
-// Controller Methods
+// Feature: OAuth - Google authentication callback with JWT token generation
 exports.googleCallback = (req, res) => {
   try {
     if (!req.user) {
@@ -64,32 +64,27 @@ exports.googleCallback = (req, res) => {
   }
 };
 
+// Feature: OAuth - Discord authentication callback with JWT token generation
 exports.discordCallback = (req, res) => {
   try {
-    console.log("🔵 [discordCallback] Processing Discord callback");
-    console.log("🔵 [discordCallback] User object:", req.user ? { id: req.user._id, email: req.user.email } : null);
-
     if (!req.user) {
-      console.error("❌ [discordCallback] No user object in request");
       return res.redirect(
         `${getFrontendUrl()}/auth/error?error=Authentication failed`
       );
     }
 
     const { accessToken, refreshToken } = generateTokens(req.user._id);
-    console.log("✅ [discordCallback] Tokens generated, setting cookies");
     setAuthCookies(res, accessToken, refreshToken);
-    console.log("✅ [discordCallback] Redirecting to:", `${getFrontendUrl()}/auth/success`);
     res.redirect(`${getFrontendUrl()}/auth/success`);
   } catch (error) {
-    console.error("❌ [discordCallback] Error:", error);
-    console.error("❌ [discordCallback] Stack:", error.stack);
+    console.error("Discord OAuth callback error:", error);
     res.redirect(
       `${getFrontendUrl()}/auth/error?error=Token generation failed`
     );
   }
 };
 
+// Feature: OAuth - Twitch authentication callback with JWT token generation
 exports.twitchCallback = (req, res) => {
   try {
     if (!req.user) {
@@ -172,7 +167,6 @@ exports.unlinkProvider = async (req, res) => {
       });
     }
 
-    // Prevent unlinking if it's the only auth method
     const linkedProviders = [
       user.googleId ? "google" : null,
       user.discordId ? "discord" : null,
@@ -187,14 +181,13 @@ exports.unlinkProvider = async (req, res) => {
       });
     }
 
-    // Unlink the provider
     switch (provider) {
       case "google":
         user.googleId = undefined;
         break;
       case "discord":
         user.discordId = undefined;
-        user.discordAvatar = undefined; // Also remove Discord avatar
+        user.discordAvatar = undefined;
         break;
       case "twitch":
         user.twitchId = undefined;
@@ -206,7 +199,6 @@ exports.unlinkProvider = async (req, res) => {
         });
     }
 
-    // Update primary provider if necessary
     if (user.authProvider === provider) {
       user.authProvider =
         linkedProviders.find((p) => p !== provider) || "local";

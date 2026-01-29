@@ -38,11 +38,12 @@ const EditTournamentPage = () => {
         setLoading(true);
         setError("");
         
-        const data = await api.get(`/api/tournaments/${id}`); // ← FIXED
+        const response = await api.get(`/api/tournaments/${id}`);
+        const data = response.data || response;
 
         const tournamentData = {
-          name: data.name,
-          description: data.description,
+          name: data.name || "",
+          description: data.description || "",
           startDate: data.startDate ? data.startDate.substring(0, 10) : "",
         };
 

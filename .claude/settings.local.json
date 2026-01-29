@@ -20,7 +20,11 @@
       "Bash(node -e:*)",
       "Bash(dir /b /s test-results*test-failed*.png)",
       "Bash(ls:*)",
-      "Bash(node seedGames.js:*)"
+      "Bash(node seedGames.js:*)",
+      "Bash(timeout:*)",
+      "Bash(ping:*)",
+      "Bash(node:*)",
+      "Bash(del servercleanup-test-data.js)"
     ]
   }
 }

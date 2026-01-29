@@ -1,23 +1,23 @@
 const Notification = require("../models/Notification");
 const Team = require("../models/Team");
 
-/**
- * Get notifications for user's teams
- */
 exports.getNotifications = async (req, res) => {
   try {
     const userId = req.user.userId || req.user.id;
     const { unreadOnly } = req.query;
 
-    // Get all teams where user is a member
     const userTeams = await Team.find({
       $or: [{ owner: userId }, { "members.user": userId }],
     }).select("_id");
 
     const teamIds = userTeams.map((t) => t._id);
 
-    // Build query
-    const query = { team: { $in: teamIds } };
+    const query = {
+      $or: [
+        { team: { $in: teamIds } },
+        { user: userId },
+      ],
+    };
     if (unreadOnly === "true") {
       query.read = false;
     }
@@ -25,13 +25,16 @@ exports.getNotifications = async (req, res) => {
     const notifications = await Notification.find(query)
       .populate("team", "name logo")
       .populate("scrim", "format scheduledTime")
+      .populate("tournament", "name")
       .sort({ createdAt: -1 })
       .limit(50)
       .lean();
 
     const unreadCount = await Notification.countDocuments({
-      team: { $in: teamIds },
-      read: false,
+      $or: [
+        { team: { $in: teamIds }, read: false },
+        { user: userId, read: false },
+      ],
     });
 
     res.json({
@@ -52,9 +55,6 @@ exports.getNotifications = async (req, res) => {
   }
 };
 
-/**
- * Mark notification as read
- */
 exports.markAsRead = async (req, res) => {
   try {
     const { id } = req.params;
@@ -68,24 +68,32 @@ exports.markAsRead = async (req, res) => {
       });
     }
 
-    // Verify user has access to this notification
-    const team = await Team.findById(notification.team);
-    if (!team) {
-      return res.status(404).json({
-        success: false,
-        message: "Team not found",
-      });
-    }
+    if (notification.user) {
+      if (notification.user.toString() !== userId.toString()) {
+        return res.status(403).json({
+          success: false,
+          message: "Not authorized to access this notification",
+        });
+      }
+    } else if (notification.team) {
+      const team = await Team.findById(notification.team);
+      if (!team) {
+        return res.status(404).json({
+          success: false,
+          message: "Team not found",
+        });
+      }
 
-    const isMember =
-      team.owner.toString() === userId.toString() ||
-      team.members.some((m) => m.user.toString() === userId.toString());
+      const isMember =
+        team.owner.toString() === userId.toString() ||
+        team.members.some((m) => m.user.toString() === userId.toString());
 
-    if (!isMember) {
-      return res.status(403).json({
-        success: false,
-        message: "Not authorized to access this notification",
-      });
+      if (!isMember) {
+        return res.status(403).json({
+          success: false,
+          message: "Not authorized to access this notification",
+        });
+      }
     }
 
     notification.read = true;
@@ -108,14 +116,10 @@ exports.markAsRead = async (req, res) => {
   }
 };
 
-/**
- * Mark all notifications as read for user's teams
- */
 exports.markAllAsRead = async (req, res) => {
   try {
     const userId = req.user.userId || req.user.id;
 
-    // Get all teams where user is a member
     const userTeams = await Team.find({
       $or: [{ owner: userId }, { "members.user": userId }],
     }).select("_id");
@@ -124,8 +128,10 @@ exports.markAllAsRead = async (req, res) => {
 
     const result = await Notification.updateMany(
       {
-        team: { $in: teamIds },
-        read: false,
+        $or: [
+          { team: { $in: teamIds }, read: false },
+          { user: userId, read: false },
+        ],
       },
       {
         $set: { read: true },
@@ -149,9 +155,6 @@ exports.markAllAsRead = async (req, res) => {
   }
 };
 
-/**
- * Delete notification
- */
 exports.deleteNotification = async (req, res) => {
   try {
     const { id } = req.params;
@@ -165,24 +168,32 @@ exports.deleteNotification = async (req, res) => {
       });
     }
 
-    // Verify user has access to this notification
-    const team = await Team.findById(notification.team);
-    if (!team) {
-      return res.status(404).json({
-        success: false,
-        message: "Team not found",
-      });
-    }
+    if (notification.user) {
+      if (notification.user.toString() !== userId.toString()) {
+        return res.status(403).json({
+          success: false,
+          message: "Not authorized to delete this notification",
+        });
+      }
+    } else if (notification.team) {
+      const team = await Team.findById(notification.team);
+      if (!team) {
+        return res.status(404).json({
+          success: false,
+          message: "Team not found",
+        });
+      }
 
-    const isMember =
-      team.owner.toString() === userId.toString() ||
-      team.members.some((m) => m.user.toString() === userId.toString());
+      const isMember =
+        team.owner.toString() === userId.toString() ||
+        team.members.some((m) => m.user.toString() === userId.toString());
 
-    if (!isMember) {
-      return res.status(403).json({
-        success: false,
-        message: "Not authorized to delete this notification",
-      });
+      if (!isMember) {
+        return res.status(403).json({
+          success: false,
+          message: "Not authorized to delete this notification",
+        });
+      }
     }
 
     await Notification.findByIdAndDelete(id);
@@ -203,14 +214,10 @@ exports.deleteNotification = async (req, res) => {
   }
 };
 
-/**
- * Delete all read notifications for user's teams
- */
 exports.deleteAllRead = async (req, res) => {
   try {
     const userId = req.user.userId || req.user.id;
 
-    // Get all teams where user is a member
     const userTeams = await Team.find({
       $or: [{ owner: userId }, { "members.user": userId }],
     }).select("_id");
@@ -218,8 +225,10 @@ exports.deleteAllRead = async (req, res) => {
     const teamIds = userTeams.map((t) => t._id);
 
     const result = await Notification.deleteMany({
-      team: { $in: teamIds },
-      read: true,
+      $or: [
+        { team: { $in: teamIds }, read: true },
+        { user: userId, read: true },
+      ],
     });
 
     res.json({
@@ -239,14 +248,10 @@ exports.deleteAllRead = async (req, res) => {
   }
 };
 
-/**
- * Get unread notification count
- */
 exports.getUnreadCount = async (req, res) => {
   try {
     const userId = req.user.userId || req.user.id;
 
-    // Get all teams where user is a member
     const userTeams = await Team.find({
       $or: [{ owner: userId }, { "members.user": userId }],
     }).select("_id");
@@ -254,8 +259,10 @@ exports.getUnreadCount = async (req, res) => {
     const teamIds = userTeams.map((t) => t._id);
 
     const unreadCount = await Notification.countDocuments({
-      team: { $in: teamIds },
-      read: false,
+      $or: [
+        { team: { $in: teamIds }, read: false },
+        { user: userId, read: false },
+      ],
     });
 
     res.json({

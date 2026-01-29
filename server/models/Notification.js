@@ -2,15 +2,22 @@ const mongoose = require("mongoose");
 
 const notificationSchema = new mongoose.Schema(
   {
+    // Can be sent to a team OR a user
     team: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Team",
-      required: true,
+    },
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
     },
     scrim: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Scrim",
-      required: true,
+    },
+    tournament: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Tournament",
     },
     chat: {
       type: mongoose.Schema.Types.ObjectId,
@@ -22,7 +29,17 @@ const notificationSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ["request", "accept", "decline", "accept-feedback", "message"],
+      enum: [
+        "request",
+        "accept",
+        "decline",
+        "accept-feedback",
+        "message",
+        "tournament_join_request",
+        "tournament_approved",
+        "tournament_denied",
+        "tournament_registration_locked",
+      ],
       default: "request",
     },
     url: {
@@ -42,9 +59,13 @@ const notificationSchema = new mongoose.Schema(
 // ✅ ENHANCED INDEXES for better performance
 notificationSchema.index({ team: 1, read: 1, createdAt: -1 });
 notificationSchema.index({ team: 1, createdAt: -1 });
+notificationSchema.index({ user: 1, read: 1, createdAt: -1 });
+notificationSchema.index({ user: 1, createdAt: -1 });
 notificationSchema.index({ scrim: 1 });
+notificationSchema.index({ tournament: 1 });
 notificationSchema.index({ createdAt: -1 });
 // Compound index for efficient queries on team notifications
 notificationSchema.index({ team: 1, read: 1 });
+notificationSchema.index({ user: 1, read: 1 });
 
 module.exports = mongoose.model("Notification", notificationSchema);

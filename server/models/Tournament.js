@@ -5,7 +5,7 @@ const phaseSchema = new Schema(
   {
     bracketType: {
       type: String,
-      enum: ["SINGLE_ELIM", "DOUBLE_ELIM", "ROUND_ROBIN"],
+      enum: ["SINGLE_ELIM", "DOUBLE_ELIM", "ROUND_ROBIN", "SWISS_STAGE", "WILD_CARD"],
       required: true,
     },
     status: {

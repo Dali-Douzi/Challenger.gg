@@ -113,5 +113,32 @@ const authMiddleware = (req, res, next) => {
   }
 };
 
+// Optional auth middleware - sets req.user if authenticated, but doesn't block if not
+const optionalAuth = (req, res, next) => {
+  try {
+    const { accessToken } = req.cookies;
+
+    if (!accessToken) {
+      return next(); // Continue without user
+    }
+
+    try {
+      const decoded = jwt.verify(accessToken, process.env.JWT_SECRET);
+      req.user = {
+        userId: decoded.userId || decoded.id,
+        id: decoded.userId || decoded.id,
+        ...decoded
+      };
+    } catch (tokenError) {
+      // Token invalid/expired, continue without user
+    }
+
+    return next();
+  } catch (error) {
+    return next(); // Continue without user on any error
+  }
+};
+
 module.exports = authMiddleware;
-exports.protect = authMiddleware;
+module.exports.protect = authMiddleware;
+module.exports.optionalAuth = optionalAuth;

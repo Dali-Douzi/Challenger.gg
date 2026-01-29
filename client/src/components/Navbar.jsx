@@ -314,7 +314,7 @@ const Navbar = () => {
                   },
                 },
                 "&.Mui-selected": {
-                  backgroundColor: "rgba(0, 255, 255, 0.16)",
+                  backgroundColor: getHoverColor(),
                   "& .MuiListItemIcon-root": {
                     color: getActiveTextColor(),
                   },
@@ -322,7 +322,7 @@ const Navbar = () => {
                     color: getActiveTextColor(),
                   },
                   "&:hover": {
-                    backgroundColor: "rgba(0, 255, 255, 0.24)",
+                    backgroundColor: getHoverColor(),
                   },
                 },
               }}
@@ -418,7 +418,7 @@ const Navbar = () => {
                   if (item.label === "Tournaments") return "rgba(255, 180, 0, 0.15)";
                   return "rgba(255, 255, 255, 0.08)";
                 };
-                
+
                 const getHoverBorderColor = () => {
                   if (item.label === "Teams") return "rgba(0, 255, 255, 0.5)";
                   if (item.label === "Scrims") return "rgba(255, 0, 255, 0.5)";
@@ -433,6 +433,21 @@ const Navbar = () => {
                   return "#00FFFF";
                 };
 
+                // Active background matches hover color for each section
+                const getActiveBackgroundColor = () => {
+                  if (item.label === "Teams") return "rgba(0, 255, 255, 0.16)";
+                  if (item.label === "Scrims") return "rgba(255, 0, 255, 0.16)";
+                  if (item.label === "Tournaments") return "rgba(255, 180, 0, 0.16)";
+                  return "rgba(0, 255, 255, 0.16)";
+                };
+
+                const getActiveBorderColor = () => {
+                  if (item.label === "Teams") return "rgba(0, 255, 255, 0.3)";
+                  if (item.label === "Scrims") return "rgba(255, 0, 255, 0.3)";
+                  if (item.label === "Tournaments") return "rgba(255, 180, 0, 0.3)";
+                  return "rgba(0, 255, 255, 0.3)";
+                };
+
                 return (
                   <Button
                     key={item.label}
@@ -442,11 +457,11 @@ const Navbar = () => {
                     sx={{
                       fontWeight: isActivePath(item.path) ? 700 : 500,
                       backgroundColor: isActivePath(item.path)
-                        ? "rgba(0, 255, 255, 0.16)"
+                        ? getActiveBackgroundColor()
                         : "transparent",
                       color: isActivePath(item.path) ? getActiveTextColor() : "inherit",
-                      border: isActivePath(item.path) 
-                        ? "1px solid rgba(0, 255, 255, 0.3)"
+                      border: isActivePath(item.path)
+                        ? `1px solid ${getActiveBorderColor()}`
                         : "1px solid transparent",
                       "&:hover": {
                         backgroundColor: getHoverColor(),

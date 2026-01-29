@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const tournamentController = require("../controllers/tournamentController");
 const protect = require("../middleware/authMiddleware");
+const { optionalAuth } = require("../middleware/authMiddleware");
 
 async function isOrganizer(req, res, next) {
   const Tournament = require("../models/Tournament");
@@ -21,9 +22,9 @@ async function isOrganizer(req, res, next) {
   next();
 }
 
-router.get("/", tournamentController.listTournaments);
-router.get("/code/:code", tournamentController.getTournamentByCode);
-router.get("/:id", tournamentController.getTournament);
+router.get("/", optionalAuth, tournamentController.listTournaments);
+router.get("/code/:code", optionalAuth, tournamentController.getTournamentByCode);
+router.get("/:id", optionalAuth, tournamentController.getTournament);
 
 router.post("/", protect, tournamentController.createTournament);
 router.put("/:id", protect, isOrganizer, tournamentController.updateTournament);

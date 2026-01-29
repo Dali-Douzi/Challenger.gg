@@ -4,6 +4,7 @@ import { Button, Menu, MenuItem, Typography } from "@mui/material";
 const RoleDropdown = ({
   memberRole,
   memberId,
+  memberUserId,
   currentUserRole,
   currentUserId,
   onRoleChange,
@@ -16,35 +17,49 @@ const RoleDropdown = ({
   const handleClick = (e) => setAnchorEl(e.currentTarget);
   const handleClose = () => setAnchorEl(null);
 
+  // Normalize IDs to strings for comparison
+  const memberUserIdStr = memberUserId?.toString?.() || memberUserId;
+  const currentUserIdStr = currentUserId?.toString?.() || currentUserId;
+  const isCurrentUser = memberUserIdStr === currentUserIdStr;
+
   // Build the allowed actions based on viewer role
   const actions = [];
 
   if (currentUserRole === "owner") {
-    // Owner can assign any non-owner role
-    ["manager", "player", "substitute"].forEach((role) => {
-      if (role !== memberRole) {
-        const label =
-          role === "player"
-            ? "Demote to Player"
-            : `Assign ${role.charAt(0).toUpperCase() + role.slice(1)}`;
-        actions.push({ label, action: () => onRoleChange(role) });
+    // Owner can assign any non-owner role (but not to themselves)
+    if (!isCurrentUser) {
+      // Assign Manager - only if member is not already a manager
+      if (memberRole !== "manager") {
+        actions.push({ label: "Promote to Manager", action: () => onRoleChange("manager") });
       }
-    });
-    // And always allow kick (unless it's themselves)
-    // FIXED: Compare memberId with currentUserId properly
-    if (memberId !== currentUserId) {
+      // Demote to Player - only if member is currently a manager
+      if (memberRole === "manager") {
+        actions.push({ label: "Demote to Player", action: () => onRoleChange("player") });
+      }
+      // Assign Substitute - only if member is not already a substitute
+      if (memberRole !== "substitute") {
+        actions.push({ label: "Assign Substitute", action: () => onRoleChange("substitute") });
+      }
+      // Promote to Player - only if member is currently a substitute
+      if (memberRole === "substitute") {
+        actions.push({ label: "Promote to Player", action: () => onRoleChange("player") });
+      }
+      // Owner can kick anyone except themselves
       actions.push({ label: "Kick from Team", action: onKick });
     }
   } else if (currentUserRole === "manager") {
-    // Manager can only switch between player ↔ substitute
-    ["player", "substitute"].forEach((role) => {
-      if (role !== memberRole) {
-        const label = role === "player" ? "Assign Player" : "Assign Substitute";
-        actions.push({ label, action: () => onRoleChange(role) });
+    // Manager can only switch between player ↔ substitute (not for themselves, owner, or other managers)
+    if (!isCurrentUser && memberRole !== "owner" && memberRole !== "manager") {
+      if (memberRole === "player") {
+        actions.push({ label: "Assign Substitute", action: () => onRoleChange("substitute") });
+      } else if (memberRole === "substitute") {
+        actions.push({ label: "Promote to Player", action: () => onRoleChange("player") });
       }
-    });
-  } else if (memberId === currentUserId) {
-    // Player can leave
+    }
+  }
+
+  // Any non-owner member can leave the team (for their own row)
+  if (isCurrentUser && memberRole !== "owner") {
     actions.push({ label: "Leave Team", action: onLeave });
   }
 

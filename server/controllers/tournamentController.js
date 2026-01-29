@@ -1,6 +1,8 @@
 const Tournament = require("../models/Tournament");
 const Match = require("../models/Match");
 const Team = require("../models/Team");
+const Notification = require("../models/Notification");
+const notificationService = require("../services/notificationService");
 
 function validateStatusTransition(currentStatus, newStatus) {
   const validTransitions = {
@@ -70,17 +72,15 @@ function nextPowerOfTwo(n) {
   return 2 ** Math.ceil(Math.log2(n));
 }
 
+// Feature: Bracket generation - seeds teams with standard pairing (1 vs lowest, 2 vs 2nd lowest)
 function seedTeamsInBracket(teams, bracketType) {
-  // Standard seeding: 1 vs lowest, 2 vs 2nd lowest, etc.
   const seededTeams = [...teams];
   const totalSlots = nextPowerOfTwo(teams.length);
 
-  // For single/double elimination, create proper seeding
   if (bracketType === "SINGLE_ELIM" || bracketType === "DOUBLE_ELIM") {
     const firstRoundMatches = Math.ceil(teams.length / 2);
     const seeds = [];
 
-    // Pair teams: 1 vs lowest seed, 2 vs 2nd lowest, etc.
     for (let i = 0; i < firstRoundMatches; i++) {
       const topSeed = seededTeams[i];
       const bottomSeed = seededTeams[teams.length - 1 - i] || null;
@@ -90,7 +90,6 @@ function seedTeamsInBracket(teams, bracketType) {
     return seeds;
   }
 
-  // For round robin, pair all teams
   if (bracketType === "ROUND_ROBIN") {
     const pairs = [];
     for (let i = 0; i < teams.length; i++) {
@@ -104,6 +103,7 @@ function seedTeamsInBracket(teams, bracketType) {
   return [];
 }
 
+// Feature: Bracket generation - creates match slots for various tournament formats
 function makeBracketTemplate(teamsCount, bracketType) {
   switch (bracketType) {
     case "SINGLE_ELIM": {
@@ -143,20 +143,31 @@ function makeBracketTemplate(teamsCount, bracketType) {
       }
       return result;
     }
+    case "SWISS_STAGE": {
+      const numRounds = Math.ceil(Math.log2(teamsCount));
+      const result = [];
+      let slot = 0;
+      for (let round = 0; round < numRounds; round++) {
+        const matchesPerRound = Math.floor(teamsCount / 2);
+        for (let i = 0; i < matchesPerRound; i++) {
+          result.push({ slot: slot++, teamA: null, teamB: null, roundNumber: round });
+        }
+      }
+      return result;
+    }
+    case "WILD_CARD": {
+      const slots = nextPowerOfTwo(teamsCount);
+      const result = [];
+      for (let i = 0; i < slots - 1; i++) {
+        result.push({ slot: i, teamA: null, teamB: null, roundNumber: 0 });
+      }
+      return result;
+    }
     default:
       throw new Error(`Unsupported bracket type: ${bracketType}`);
   }
 }
 
-// ===========================
-// CONTROLLER METHODS
-// ===========================
-
-/**
- * @desc    List all tournaments
- * @route   GET /api/tournaments
- * @access  Public
- */
 exports.listTournaments = async (req, res) => {
   try {
     const tournaments = await Tournament.find({})
@@ -181,11 +192,6 @@ exports.listTournaments = async (req, res) => {
   }
 };
 
-/**
- * @desc    Get tournament by referee code
- * @route   GET /api/tournaments/code/:code
- * @access  Public
- */
 exports.getTournamentByCode = async (req, res) => {
   try {
     const tourney = await Tournament.findOne({ refereeCode: req.params.code })
@@ -225,11 +231,6 @@ exports.getTournamentByCode = async (req, res) => {
   }
 };
 
-/**
- * @desc    Get single tournament by ID
- * @route   GET /api/tournaments/:id
- * @access  Public
- */
 exports.getTournament = async (req, res) => {
   try {
     const tourney = await Tournament.findById(req.params.id)
@@ -284,17 +285,10 @@ exports.getTournament = async (req, res) => {
   }
 };
 
-/**
- * @desc    Create a new tournament
- * @route   POST /api/tournaments
- * @access  Private
- */
 exports.createTournament = async (req, res) => {
   try {
     const { name, description, startDate, game, maxParticipants, phases } =
       req.body;
-
-    console.log("Creating tournament with user ID:", req.user.userId);
 
     if (
       !name ||
@@ -354,11 +348,6 @@ exports.createTournament = async (req, res) => {
   }
 };
 
-/**
- * @desc    Update tournament details
- * @route   PUT /api/tournaments/:id
- * @access  Private (Organizer only)
- */
 exports.updateTournament = async (req, res) => {
   try {
     const { name, description, startDate, game, maxParticipants } = req.body;
@@ -371,7 +360,6 @@ exports.updateTournament = async (req, res) => {
       });
     }
 
-    // Authorization check - only organizer can update
     if (tourney.organizer.toString() !== req.user.userId) {
       return res.status(403).json({
         success: false,
@@ -379,7 +367,6 @@ exports.updateTournament = async (req, res) => {
       });
     }
 
-    // Update fields if provided
     if (name) tourney.name = name;
     if (description) tourney.description = description;
     if (startDate) tourney.startDate = startDate;
@@ -420,11 +407,6 @@ exports.updateTournament = async (req, res) => {
   }
 };
 
-/**
- * @desc    Delete a tournament
- * @route   DELETE /api/tournaments/:id
- * @access  Private (Organizer only)
- */
 exports.deleteTournament = async (req, res) => {
   try {
     await Match.deleteMany({ tournament: req.params.id });
@@ -446,11 +428,6 @@ exports.deleteTournament = async (req, res) => {
   }
 };
 
-/**
- * @desc    Lock registrations for a tournament
- * @route   PUT /api/tournaments/:id/lock-registrations
- * @access  Private (Organizer only)
- */
 exports.lockRegistrations = async (req, res) => {
   try {
     const tourney = await Tournament.findById(req.params.id);
@@ -489,6 +466,21 @@ exports.lockRegistrations = async (req, res) => {
       .populate("pendingTeams", "name")
       .populate("referees", "username");
 
+    try {
+      const teamsWithMembers = await Team.find({
+        _id: { $in: tourney.teams }
+      }).select("name owner members");
+
+      if (teamsWithMembers.length > 0) {
+        await notificationService.notifyRegistrationLocked({
+          tournament: updated,
+          teams: teamsWithMembers,
+        });
+      }
+    } catch (notifErr) {
+      console.error("Error sending registration locked notifications:", notifErr);
+    }
+
     res.json({
       success: true,
       message: "Tournament registrations locked",
@@ -506,11 +498,7 @@ exports.lockRegistrations = async (req, res) => {
   }
 };
 
-/**
- * @desc    Lock bracket and generate matches
- * @route   PUT /api/tournaments/:id/lock-bracket
- * @access  Private (Organizer only)
- */
+// Feature: Bracket generation - locks bracket and creates seeded matches for all phases
 exports.lockBracket = async (req, res) => {
   try {
     const tourney = await Tournament.findById(req.params.id);
@@ -539,20 +527,17 @@ exports.lockBracket = async (req, res) => {
     tourney.status = "BRACKET_LOCKED";
     await tourney.save();
 
-    // Delete existing matches and generate new ones with seeded teams
     await Match.deleteMany({ tournament: req.params.id });
 
     for (let idx = 0; idx < tourney.phases.length; idx++) {
       const phase = tourney.phases[idx];
 
-      // Get seeded matchups for first round
       const seededPairs = seedTeamsInBracket(tourney.teams, phase.bracketType);
       const template = makeBracketTemplate(
         tourney.teams.length,
         phase.bracketType
       );
 
-      // Assign teams to first round matches
       const docs = template.map((m, index) => {
         const matchData = {
           tournament: tourney._id,
@@ -563,7 +548,6 @@ exports.lockBracket = async (req, res) => {
           roundNumber: m.roundNumber || 0,
         };
 
-        // Seed first round matches
         if (index < seededPairs.length) {
           matchData.teamA = seededPairs[index].teamA;
           matchData.teamB = seededPairs[index].teamB;
@@ -603,11 +587,6 @@ exports.lockBracket = async (req, res) => {
   }
 };
 
-/**
- * @desc    Start the tournament
- * @route   PUT /api/tournaments/:id/start
- * @access  Private (Organizer or Referee)
- */
 exports.startTournament = async (req, res) => {
   try {
     const tourney = await Tournament.findById(req.params.id);
@@ -671,11 +650,6 @@ exports.startTournament = async (req, res) => {
   }
 };
 
-/**
- * @desc    Complete the tournament
- * @route   PUT /api/tournaments/:id/complete
- * @access  Private (Organizer only)
- */
 exports.completeTournament = async (req, res) => {
   try {
     const tourney = await Tournament.findById(req.params.id);
@@ -728,11 +702,6 @@ exports.completeTournament = async (req, res) => {
   }
 };
 
-/**
- * @desc    Add team to tournament (request to join)
- * @route   POST /api/tournaments/:id/teams
- * @access  Private
- */
 exports.addTeam = async (req, res) => {
   try {
     const { teamId } = req.body;
@@ -769,8 +738,35 @@ exports.addTeam = async (req, res) => {
       });
     }
 
+    // Validate that the team's game matches the tournament's game
+    const team = await Team.findById(teamId).populate("game", "name");
+    if (!team) {
+      return res.status(404).json({
+        success: false,
+        message: "Team not found",
+      });
+    }
+
+    const teamGameName = team.game?.name || team.game;
+    if (teamGameName !== tourney.game) {
+      return res.status(400).json({
+        success: false,
+        message: `This tournament is for ${tourney.game}. Your team plays ${teamGameName}.`,
+      });
+    }
+
     tourney.pendingTeams.push(teamId);
     await tourney.save();
+
+    try {
+      await notificationService.notifyTournamentJoinRequest({
+        tournament: tourney,
+        team: team,
+        organizerId: tourney.organizer.toString(),
+      });
+    } catch (notifErr) {
+      console.error("Error sending join request notification:", notifErr);
+    }
 
     res.json({
       success: true,
@@ -788,11 +784,6 @@ exports.addTeam = async (req, res) => {
   }
 };
 
-/**
- * @desc    Get pending teams
- * @route   GET /api/tournaments/:id/teams/pending
- * @access  Private (Organizer only)
- */
 exports.getPendingTeams = async (req, res) => {
   try {
     const tourney = await Tournament.findById(req.params.id).populate(
@@ -816,11 +807,6 @@ exports.getPendingTeams = async (req, res) => {
   }
 };
 
-/**
- * @desc    Approve a pending team
- * @route   PUT /api/tournaments/:id/teams/:tid/approve
- * @access  Private (Organizer only)
- */
 exports.approveTeam = async (req, res) => {
   try {
     const tourney = await Tournament.findById(req.params.id);
@@ -851,6 +837,29 @@ exports.approveTeam = async (req, res) => {
     tourney.teams.push(req.params.tid);
     await tourney.save();
 
+    try {
+      const team = await Team.findById(req.params.tid);
+      if (team) {
+        await notificationService.notifyTournamentApproved({
+          tournament: tourney,
+          team: team,
+        });
+
+        await Notification.updateMany(
+          {
+            user: req.user.userId,
+            tournament: tourney._id,
+            type: "tournament_join_request",
+            message: { $regex: team.name, $options: "i" },
+            read: false,
+          },
+          { $set: { read: true } }
+        );
+      }
+    } catch (notifErr) {
+      console.error("Error sending approval notification:", notifErr);
+    }
+
     res.json({
       success: true,
       message: "Team approved",
@@ -867,11 +876,6 @@ exports.approveTeam = async (req, res) => {
   }
 };
 
-/**
- * @desc    Remove a team from tournament
- * @route   DELETE /api/tournaments/:id/teams/:tid
- * @access  Private (Organizer or Team Owner)
- */
 exports.removeTeam = async (req, res) => {
   try {
     const tourney = await Tournament.findById(req.params.id);
@@ -899,6 +903,11 @@ exports.removeTeam = async (req, res) => {
       });
     }
 
+    const wasPending = tourney.pendingTeams.some(
+      (t) => t.toString() === req.params.tid
+    );
+    const isOrganizerAction = tourney.organizer.toString() === req.user.userId;
+
     tourney.pendingTeams = tourney.pendingTeams.filter(
       (t) => t.toString() !== req.params.tid
     );
@@ -906,6 +915,28 @@ exports.removeTeam = async (req, res) => {
       (t) => t.toString() !== req.params.tid
     );
     await tourney.save();
+
+    if (wasPending && isOrganizerAction && team) {
+      try {
+        await notificationService.notifyTournamentDenied({
+          tournament: tourney,
+          team: team,
+        });
+
+        await Notification.updateMany(
+          {
+            user: req.user.userId,
+            tournament: tourney._id,
+            type: "tournament_join_request",
+            message: { $regex: team.name, $options: "i" },
+            read: false,
+          },
+          { $set: { read: true } }
+        );
+      } catch (notifErr) {
+        console.error("Error sending denial notification:", notifErr);
+      }
+    }
 
     res.json({
       success: true,
@@ -923,11 +954,6 @@ exports.removeTeam = async (req, res) => {
   }
 };
 
-/**
- * @desc    Add referee using referee code
- * @route   POST /api/tournaments/:id/referees
- * @access  Private
- */
 exports.addReferee = async (req, res) => {
   try {
     const { code } = req.body;
@@ -968,11 +994,6 @@ exports.addReferee = async (req, res) => {
   }
 };
 
-/**
- * @desc    Remove a referee
- * @route   DELETE /api/tournaments/:id/referees/:uid
- * @access  Private (Organizer or Self)
- */
 exports.removeReferee = async (req, res) => {
   try {
     const tourney = await Tournament.findById(req.params.id);
@@ -1008,11 +1029,6 @@ exports.removeReferee = async (req, res) => {
   }
 };
 
-/**
- * @desc    Update phase status
- * @route   PUT /api/tournaments/:id/phases/:idx
- * @access  Private (Organizer only)
- */
 exports.updatePhase = async (req, res) => {
   try {
     const { status } = req.body;
@@ -1051,11 +1067,6 @@ exports.updatePhase = async (req, res) => {
   }
 };
 
-/**
- * @desc    Get bracket template for a phase
- * @route   GET /api/tournaments/:id/bracket-template/:phaseIndex
- * @access  Private (Organizer or Referee)
- */
 exports.getBracketTemplate = async (req, res) => {
   try {
     const tourney = await Tournament.findById(req.params.id);
@@ -1107,11 +1118,6 @@ exports.getBracketTemplate = async (req, res) => {
   }
 };
 
-/**
- * @desc    Get all matches for a tournament
- * @route   GET /api/tournaments/:id/matches
- * @access  Public
- */
 exports.getMatches = async (req, res) => {
   try {
     const matches = await Match.find({ tournament: req.params.id })
@@ -1138,11 +1144,6 @@ exports.getMatches = async (req, res) => {
   }
 };
 
-/**
- * @desc    Update a single match (submit result)
- * @route   PUT /api/tournaments/:id/matches/:matchId
- * @access  Private (Organizer or Referee)
- */
 exports.updateMatch = async (req, res) => {
   try {
     const { scoreA, scoreB, winner, status } = req.body;
@@ -1163,7 +1164,6 @@ exports.updateMatch = async (req, res) => {
       });
     }
 
-    // Authorization check
     const userId = req.user.userId;
     const isOrganizer = tourney.organizer.toString() === userId;
     const isReferee = tourney.referees.some((r) => r.toString() === userId);
@@ -1175,12 +1175,10 @@ exports.updateMatch = async (req, res) => {
       });
     }
 
-    // Update match fields
     if (scoreA !== undefined) match.scoreA = scoreA;
     if (scoreB !== undefined) match.scoreB = scoreB;
     if (winner) {
       match.winner = winner;
-      // Set loser as the other team
       if (match.teamA && match.teamB) {
         match.loser = winner.toString() === match.teamA.toString() ? match.teamB : match.teamA;
       }
@@ -1212,11 +1210,6 @@ exports.updateMatch = async (req, res) => {
   }
 };
 
-/**
- * @desc    Update bracket (bulk update matches)
- * @route   PUT /api/tournaments/:id/bracket
- * @access  Private (Organizer only)
- */
 exports.updateBracket = async (req, res) => {
   try {
     const { phaseIndex, matches } = req.body;

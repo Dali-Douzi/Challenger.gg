@@ -103,19 +103,28 @@ const ScrimDashboard = () => {
 
   const canManageTeam = (team) => {
     if (!user || !team) return false;
-    
+
     const userId = user.id || user._id || user.userId;
     if (!userId) return false;
-    
+
     const ownerId = team.owner?._id || team.owner;
     const isOwner = ownerId?.toString() === userId.toString();
-    
+
     const isManager = team.members?.some((m) => {
       const memberId = m.user?._id || m.user;
       return memberId?.toString() === userId.toString() && m.role === "manager";
     });
-    
+
     return isOwner || isManager;
+  };
+
+  // Check if two teams share the same owner (to prevent same-owner scrim requests)
+  const teamsShareOwner = (teamA, teamB) => {
+    if (!teamA || !teamB) return false;
+    const ownerA = teamA.owner?._id || teamA.owner;
+    const ownerB = teamB.owner?._id || teamB.owner;
+    if (!ownerA || !ownerB) return false;
+    return ownerA.toString() === ownerB.toString();
   };
 
   useEffect(() => {
@@ -226,6 +235,9 @@ const ScrimDashboard = () => {
         const scrimTime = new Date(scrim.scheduledTime);
         return scrimTime > oneHourAgo;
       });
+
+      // Sort by soonest scrim first
+      scrimsArray.sort((a, b) => new Date(a.scheduledTime) - new Date(b.scheduledTime));
 
       setScrims(scrimsArray);
       
@@ -912,9 +924,18 @@ const ScrimDashboard = () => {
               <List sx={{ maxHeight: 600, overflow: "auto" }}>
                 {scrims.map((scrim) => {
                   const isRequested = requested.includes(scrim._id);
+
+                  // Check if this is my scrim (posted by my selected team)
                   const isMyScrim =
                     scrim.teamA?._id === selectedTeam ||
                     scrim.teamB?._id === selectedTeam;
+
+                  // Check if I can manage the posting team (owner or manager)
+                  const canManagePostingTeam = canManageTeam(scrim.teamA);
+
+                  // Check if my selected request team shares owner with posting team
+                  const selectedTeamObj = teams.find(t => t._id === selectedRequestTeam);
+                  const sameOwnerAsPosting = teamsShareOwner(scrim.teamA, selectedTeamObj);
 
                   return (
                     <ListItem
@@ -1005,22 +1026,43 @@ const ScrimDashboard = () => {
                                 gap: 1,
                                 flexShrink: 0,
                                 justifyContent: "flex-end",
-                                minWidth: isMyScrim ? 240 : 140,
+                                minWidth: canManagePostingTeam ? 280 : 140,
                               }}
                             >
                               {scrim.status === "booked" ? (
-                                <Chip
-                                  label="BOOKED"
-                                  size="small"
-                                  sx={{
-                                    bgcolor: alpha(theme.palette.success.main, 0.2),
-                                    color: theme.palette.success.main,
-                                    fontWeight: 700,
-                                    border: `1px solid ${alpha(theme.palette.success.main, 0.5)}`,
-                                    minWidth: 120,
-                                  }}
-                                />
-                              ) : isMyScrim ? (
+                                <>
+                                  <Chip
+                                    label="BOOKED"
+                                    size="small"
+                                    sx={{
+                                      bgcolor: alpha(theme.palette.success.main, 0.2),
+                                      color: theme.palette.success.main,
+                                      fontWeight: 700,
+                                      border: `1px solid ${alpha(theme.palette.success.main, 0.5)}`,
+                                      minWidth: 120,
+                                    }}
+                                  />
+                                  {canManagePostingTeam && (
+                                    <Button
+                                      size="small"
+                                      variant="outlined"
+                                      onClick={() => handleEditScrim(scrim._id)}
+                                      sx={{
+                                        borderColor: theme.palette.warning.main,
+                                        color: theme.palette.warning.main,
+                                        fontWeight: 600,
+                                        whiteSpace: "nowrap",
+                                        "&:hover": {
+                                          borderColor: theme.palette.warning.light,
+                                          bgcolor: alpha(theme.palette.warning.main, 0.1),
+                                        },
+                                      }}
+                                    >
+                                      Edit
+                                    </Button>
+                                  )}
+                                </>
+                              ) : canManagePostingTeam ? (
                                 <>
                                   {scrim.requests && scrim.requests.length > 0 ? (
                                     <>
@@ -1032,7 +1074,6 @@ const ScrimDashboard = () => {
                                           color: theme.palette.info.main,
                                           fontWeight: 700,
                                           border: `1px solid ${alpha(theme.palette.info.main, 0.5)}`,
-                                          mr: 1,
                                         }}
                                       />
                                       <Button
@@ -1080,7 +1121,34 @@ const ScrimDashboard = () => {
                                       }}
                                     />
                                   )}
+                                  <Button
+                                    size="small"
+                                    variant="outlined"
+                                    onClick={() => handleEditScrim(scrim._id)}
+                                    sx={{
+                                      borderColor: theme.palette.warning.main,
+                                      color: theme.palette.warning.main,
+                                      fontWeight: 600,
+                                      whiteSpace: "nowrap",
+                                      "&:hover": {
+                                        borderColor: theme.palette.warning.light,
+                                        bgcolor: alpha(theme.palette.warning.main, 0.1),
+                                      },
+                                    }}
+                                  >
+                                    Edit
+                                  </Button>
                                 </>
+                              ) : sameOwnerAsPosting ? (
+                                <Chip
+                                  label="Same Owner"
+                                  size="small"
+                                  sx={{
+                                    bgcolor: alpha(theme.palette.text.disabled, 0.1),
+                                    color: theme.palette.text.disabled,
+                                    fontWeight: 600,
+                                  }}
+                                />
                               ) : isRequested ? (
                                 <Button
                                   size="small"

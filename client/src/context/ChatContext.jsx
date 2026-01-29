@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 import api from '../services/apiClient';
+import { getSocket, onNewMessage, offNewMessage, onSocketConnect, offSocketConnect } from '../services/socket';
 
 /**
  * ChatContext
@@ -55,8 +56,8 @@ export const ChatProvider = ({ children }) => {
   useEffect(() => {
     if (isAuthenticated) {
       fetchUnreadCount();
-      // Refresh every 30 seconds
-      const interval = setInterval(fetchUnreadCount, 30000);
+      // Refresh every 15 seconds as fallback
+      const interval = setInterval(fetchUnreadCount, 15000);
       return () => clearInterval(interval);
     }
   }, [isAuthenticated, fetchUnreadCount]);
@@ -185,6 +186,53 @@ export const ChatProvider = ({ children }) => {
       )
     );
   }, []);
+
+  // Listen for real-time new messages via Socket.IO
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const handleNewMessage = (data) => {
+      console.log('💬 [ChatContext] New message received:', data);
+
+      // Refresh unread count when a new message arrives
+      fetchUnreadCount();
+
+      // If this chat is open but minimized, increment its unread count
+      if (data.chatId || data.scrimId) {
+        const scrimId = data.scrimId || data.chat?.metadata?.scrimId;
+        if (scrimId) {
+          incrementUnread(scrimId);
+        }
+      }
+    };
+
+    // Function to attach listeners
+    const attachListeners = () => {
+      const socket = getSocket();
+      if (socket) {
+        console.log('💬 [ChatContext] Attaching message listener to socket');
+        onNewMessage(handleNewMessage);
+      }
+    };
+
+    // Try to attach immediately if socket exists
+    attachListeners();
+
+    // Also attach when socket connects (in case it wasn't ready)
+    const handleConnect = () => {
+      console.log('💬 [ChatContext] Socket connected, attaching message listener');
+      attachListeners();
+      // Fetch fresh unread count on reconnect
+      fetchUnreadCount();
+    };
+
+    onSocketConnect(handleConnect);
+
+    return () => {
+      offNewMessage(handleNewMessage);
+      offSocketConnect(handleConnect);
+    };
+  }, [isAuthenticated, fetchUnreadCount, incrementUnread]);
 
   /**
    * Reset unread count for a chat

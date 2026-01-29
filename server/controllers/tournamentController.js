@@ -1183,6 +1183,15 @@ exports.updateMatch = async (req, res) => {
       });
     }
 
+    // Check if the phase is complete - scores cannot be changed after phase completion
+    const phase = tourney.phases[match.phaseIndex];
+    if (phase && phase.status === "COMPLETE") {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot update scores for a completed phase",
+      });
+    }
+
     if (scoreA !== undefined) match.scoreA = scoreA;
     if (scoreB !== undefined) match.scoreB = scoreB;
     if (winner) {
@@ -1243,6 +1252,15 @@ exports.updateBracket = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Can only update bracket after it's locked",
+      });
+    }
+
+    // Check if the phase is complete - bracket cannot be changed after phase completion
+    const phase = tourney.phases[phaseIndex];
+    if (phase && phase.status === "COMPLETE") {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot update bracket for a completed phase",
       });
     }
 

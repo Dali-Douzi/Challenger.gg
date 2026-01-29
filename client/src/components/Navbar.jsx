@@ -52,6 +52,8 @@ import { useChat } from "../context/ChatContext";
 import { getUserChats } from "../services/chatService";
 import { formatDistanceToNow } from "date-fns";
 import api from "../services/apiClient";
+import MessagesDialog from "./MessagesDialog";
+import { getSocket, onNewMessage, offNewMessage, onSocketConnect, offSocketConnect } from "../services/socket";
 
 const Navbar = () => {
   const navigate = useNavigate();
@@ -77,6 +79,7 @@ const Navbar = () => {
   const [chats, setChats] = useState([]);
   const [chatsLoading, setChatsLoading] = useState(false);
   const [deleteAllDialogOpen, setDeleteAllDialogOpen] = useState(false);
+  const [messagesDialogOpen, setMessagesDialogOpen] = useState(false);
   const open = Boolean(anchorEl);
   const notifOpen = Boolean(notifAnchorEl);
   const messagesOpen = Boolean(messagesAnchorEl);
@@ -216,19 +219,55 @@ const Navbar = () => {
       }
     }
 
-    // Navigate and open chat
+    // Open chat in floating window (no navigation needed - ChatManager is global)
     if (chat.type === 'scrim' && chat.metadata?.scrimId) {
-      navigate(`/scrims`);
       openChat(chat.metadata.scrimId, chat._id);
     }
     handleMessagesClose();
   };
 
-  // Fetch chats on mount
+  // Fetch chats on mount and periodically refresh
   useEffect(() => {
     if (user) {
       fetchChats();
+      // Refresh chats every 15 seconds
+      const interval = setInterval(fetchChats, 15000);
+      return () => clearInterval(interval);
     }
+  }, [user]);
+
+  // Listen for real-time new messages to update chat list
+  useEffect(() => {
+    if (!user) return;
+
+    const handleNewMessage = () => {
+      // Refresh chats when a new message arrives
+      fetchChats();
+    };
+
+    // Function to attach listeners
+    const attachListeners = () => {
+      const socket = getSocket();
+      if (socket) {
+        onNewMessage(handleNewMessage);
+      }
+    };
+
+    // Try to attach immediately if socket exists
+    attachListeners();
+
+    // Also attach when socket connects (in case it wasn't ready)
+    const handleConnect = () => {
+      attachListeners();
+      fetchChats();
+    };
+
+    onSocketConnect(handleConnect);
+
+    return () => {
+      offNewMessage(handleNewMessage);
+      offSocketConnect(handleConnect);
+    };
   }, [user]);
 
   const navItems = [
@@ -969,8 +1008,8 @@ const Navbar = () => {
             <Button
               size="small"
               onClick={() => {
-                navigate('/scrims');
                 handleMessagesClose();
+                setMessagesDialogOpen(true);
               }}
               sx={{
                 fontSize: "0.75rem",
@@ -1038,6 +1077,12 @@ const Navbar = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Messages Dialog for viewing all chats */}
+      <MessagesDialog
+        open={messagesDialogOpen}
+        onClose={() => setMessagesDialogOpen(false)}
+      />
     </>
   );
 };

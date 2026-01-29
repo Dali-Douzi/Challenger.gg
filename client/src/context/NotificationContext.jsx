@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 import notificationService from '../services/notificationService';
-import { getSocket, onNewNotification, offNewNotification } from '../services/socket';
+import { getSocket, onNewNotification, offNewNotification, onSocketConnect, offSocketConnect } from '../services/socket';
 
 /**
  * NotificationContext
@@ -182,34 +182,54 @@ export const NotificationProvider = ({ children }) => {
 
   // Listen for real-time notifications via Socket.IO
   useEffect(() => {
-    const socket = getSocket();
-    if (!socket || !isAuthenticated) return;
+    if (!isAuthenticated) return;
 
     const handleNewNotification = (data) => {
       console.log('🔔 Real-time notification received:', data);
-      
+
       if (data.notification) {
         addNotification(data.notification);
       }
     };
 
-    onNewNotification(handleNewNotification);
+    // Function to attach listeners
+    const attachListeners = () => {
+      const socket = getSocket();
+      if (socket) {
+        console.log('🔔 Attaching notification listener to socket');
+        onNewNotification(handleNewNotification);
+      }
+    };
+
+    // Try to attach immediately if socket exists
+    attachListeners();
+
+    // Also attach when socket connects (in case it wasn't ready)
+    const handleConnect = () => {
+      console.log('🔔 Socket connected, attaching notification listener');
+      attachListeners();
+      // Fetch fresh notifications on reconnect
+      fetchNotifications();
+    };
+
+    onSocketConnect(handleConnect);
 
     return () => {
       offNewNotification(handleNewNotification);
+      offSocketConnect(handleConnect);
     };
-  }, [isAuthenticated, addNotification]);
+  }, [isAuthenticated, addNotification, fetchNotifications]);
 
-  // Periodically refresh unread count (fallback)
+  // Periodically refresh notifications (fallback for when socket fails)
   useEffect(() => {
     if (!isAuthenticated) return;
 
     const interval = setInterval(() => {
-      fetchUnreadCount();
-    }, 60000); // Every minute
+      fetchNotifications();
+    }, 15000); // Every 15 seconds
 
     return () => clearInterval(interval);
-  }, [isAuthenticated, fetchUnreadCount]);
+  }, [isAuthenticated, fetchNotifications]);
 
   const value = {
     notifications,

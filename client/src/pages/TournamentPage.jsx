@@ -515,7 +515,7 @@ const TournamentPage = () => {
               ) {
                 try {
                   await api.delete(
-                    `/api/tournaments/${id}/referees/${currentUser._id}`
+                    `/api/tournaments/${id}/referees/${currentUser.id}`
                   );
                   setSuccessMessage("You have quit as referee");
                   await fetchTournament(); // Refresh tournament data

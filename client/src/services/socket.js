@@ -62,6 +62,17 @@ export const disconnectSocket = () => {
 export const getSocket = () => socket;
 export const isSocketConnected = () => socket && socket.connected;
 
+// Subscribe to socket connection events
+export const onSocketConnect = (callback) => {
+  if (!socket) return;
+  socket.on('connect', callback);
+};
+
+export const offSocketConnect = (callback) => {
+  if (!socket) return;
+  socket.off('connect', callback);
+};
+
 export const joinChatRoom = (chatId) => {
   if (!socket) {
     console.warn('⚠️ Socket not initialized, cannot join chat room');
@@ -162,4 +173,6 @@ export default {
   offChatCreated,
   onChatJoined,
   offChatJoined,
+  onSocketConnect,
+  offSocketConnect,
 };
